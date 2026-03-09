@@ -152,6 +152,7 @@ class ExecutionEngine:
             self.price_socket_thread = None
 
     def execute(self, symbol: str, side: str, state: dict):
+        manager = self.symbol_registry.get_manager(symbol)
         logger.info(f"--- EXECUTION {symbol} | {side} ---")
 
         prev_long = self.last_sizes.get(symbol, {}).get("long", 0)
@@ -176,7 +177,12 @@ class ExecutionEngine:
                 print("State SHORT:", state["short_size"])
                 print("=========================================")
 
-                order = self.exchange.open_market_position(symbol, "sell", new_short)
+                order = self.exchange.open_market_position(
+                    symbol,
+                    "sell",
+                    new_short,
+                    manager.config.leverage
+                )
                 self.profit_manager.register_entry_order(symbol, order)
 
             if new_long > 0:
@@ -189,7 +195,12 @@ class ExecutionEngine:
                 print("State SHORT:", state["short_size"])
                 print("=========================================")
 
-                order = self.exchange.open_market_position(symbol, "buy", new_long)
+                order = self.exchange.open_market_position(
+                    symbol,
+                    "buy",
+                    new_long,
+                    manager.config.leverage
+                )
                 self.profit_manager.register_entry_order(symbol, order)
 
         # === УСРЕДНЕНИЕ ===
@@ -208,7 +219,12 @@ class ExecutionEngine:
                 print("State SHORT:", state["short_size"])
                 print("=================================")
 
-                order = self.exchange.open_market_position(symbol, "buy", delta_long)
+                order = self.exchange.open_market_position(
+                    symbol,
+                    "buy",
+                    delta_long,
+                    manager.config.leverage
+                )
                 self.profit_manager.register_entry_order(symbol, order)
 
             if delta_short > 0:
@@ -222,7 +238,12 @@ class ExecutionEngine:
                 print("State SHORT:", state["short_size"])
                 print("=================================")
 
-                order = self.exchange.open_market_position(symbol, "sell", delta_short)
+                order = self.exchange.open_market_position(
+                    symbol,
+                    "sell",
+                    delta_short,
+                    manager.config.leverage
+                )
                 self.profit_manager.register_entry_order(symbol, order)
 
         # Сохраняем текущие размеры
@@ -271,9 +292,19 @@ class ExecutionEngine:
             )
 
             if long_pos:
-                self.exchange.open_market_position(symbol, "sell", abs(float(long_pos["positionAmt"])))
+                self.exchange.open_market_position(
+                    symbol,
+                    "sell",
+                    abs(float(long_pos["positionAmt"])),
+                    manager.config.leverage
+                )
 
             if short_pos:
-                self.exchange.open_market_position(symbol, "buy", abs(float(short_pos["positionAmt"])))        
+                self.exchange.open_market_position(
+                    symbol,
+                    "buy",
+                    abs(float(short_pos["positionAmt"])),
+                    manager.config.leverage
+                )        
 
         logger.info(f"Execution complete for {symbol}")

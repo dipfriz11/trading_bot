@@ -8,32 +8,24 @@ API_SECRET = os.getenv("API_SECRET")
 
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
-LEVERAGE = 10
-ORDER_USDT = 20
 DRY_RUN = True
 
 COINS = {
     "ETHUSDT": {
-        "base_size": 18,
-        "target_profit": 1.0,
-        "auto_close": True
+        "base_size": 12,
+        "hedge_ratio": 0.5,
+        "major_multiplier": 2.0,
+        "minor_multiplier": 0.5,
+        "auto_close": True,
+        "target_profit": 0.5,
+        "repeat_mode": "ignore",
+        "max_cycles": 5,
+        "max_total_exposure": None,
+        "leverage": 10
     },
 
     "BARDUSDT": {
         "base_size": 12,
-        "target_profit": 0.5,
-        "auto_close": True
-    },
-
-    "SENTUSDT": {
-        "base_size": 12,
-        "target_profit": 0.5,
-        "auto_close": True
-    },
-
-    "BANANAS31USDT": {
-        "symbol": "BANANAS31USDT",
-        "base_size": 18,
         "hedge_ratio": 1.0,
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
@@ -41,13 +33,47 @@ COINS = {
         "target_profit": 0.5,
         "repeat_mode": "ignore",
         "max_cycles": 5,
-        "max_total_exposure": None
+        "max_total_exposure": None,
+        "leverage": 10
+    },
+
+    "SENTUSDT": {
+        "base_size": 12,
+        "hedge_ratio": 0.5,
+        "major_multiplier": 2.0,
+        "minor_multiplier": 0.5,
+        "auto_close": True,
+        "target_profit": 0.5,
+        "repeat_mode": "ignore",
+        "max_cycles": 5,
+        "max_total_exposure": None,
+        "leverage": 10
+    },
+
+    "BANANAS31USDT": {
+        "base_size": 12,
+        "hedge_ratio": 0.5,
+        "major_multiplier": 2.0,
+        "minor_multiplier": 0.5,
+        "auto_close": True,
+        "target_profit": 0.5,
+        "repeat_mode": "ignore",
+        "max_cycles": 5,
+        "max_total_exposure": None,
+        "leverage": 10
     },
 
     "DAMUSDT": {
-        "base_size": 24,
+        "base_size": 12,
+        "hedge_ratio": 0.5,
+        "major_multiplier": 2.0,
+        "minor_multiplier": 0.5,
+        "auto_close": True,
         "target_profit": 0.5,
-        "auto_close": True
+        "repeat_mode": "ignore",
+        "max_cycles": 5,
+        "max_total_exposure": None,
+        "leverage": 10
     }
 }
 
@@ -76,3 +102,12 @@ def get_target_profit(symbol, cycle_number):
             return target[max_cycle]
 
     return 0
+
+def get_coin_config(symbol: str) -> dict:
+
+    coin = COINS.get(symbol)
+
+    if not coin:
+        raise ValueError(f"Symbol {symbol} not configured in COINS")
+
+    return coin

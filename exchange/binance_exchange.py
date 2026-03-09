@@ -1,5 +1,5 @@
 from binance.client import Client
-from config import API_KEY, API_SECRET, LEVERAGE
+from config import API_KEY, API_SECRET
 from .base_exchange import BaseExchange
 import math
 from decimal import Decimal
@@ -63,7 +63,7 @@ class BinanceExchange(BaseExchange):
     # OPEN POSITION (USDT BASED)
     # ==============================
 
-    def open_market_position(self, symbol: str, side: str, usdt_amount: float):
+    def open_market_position(self, symbol: str, side: str, usdt_amount: float, leverage: int):
 
         price = self.get_price(symbol)
 
@@ -127,7 +127,7 @@ class BinanceExchange(BaseExchange):
         print("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 
         # leverage
-        self.change_leverage(symbol, LEVERAGE)
+        self.change_leverage(symbol, leverage)
 
         order = self.place_market_order(symbol, side, quantity)
 

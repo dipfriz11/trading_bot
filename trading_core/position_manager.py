@@ -12,6 +12,7 @@ class CycleConfig:
     repeat_mode: str  # "ACCUMULATE", "IGNORE"
     max_cycles: int | None = None
     max_total_exposure: float | None = None
+    leverage: int = 1
 
 
 class PositionManager:
@@ -79,7 +80,7 @@ class PositionManager:
             self.start_cycle(side)
             return True
 
-        if self.config.repeat_mode == "IGNORE" and self.cycle_active:
+        if (self.config.repeat_mode or "").lower() == "ignore" and self.cycle_active:
             if side == self.last_signal:
                 return False
 

@@ -197,14 +197,15 @@ def build_cycle_config(symbol: str) -> CycleConfig:
 
     return CycleConfig(
         base_size=coin["base_size"],
-        hedge_ratio=0.5,
-        major_multiplier=2.0,
-        minor_multiplier=0.5,
+        hedge_ratio=coin["hedge_ratio"],
+        major_multiplier=coin["major_multiplier"],
+        minor_multiplier=coin["minor_multiplier"],
         target_profit=coin["target_profit"],
         auto_close=coin["auto_close"],
-        repeat_mode="IGNORE",
-        max_cycles=5,
-        max_total_exposure=2000
+        repeat_mode=coin["repeat_mode"],
+        max_cycles=coin["max_cycles"],
+        max_total_exposure=coin["max_total_exposure"],
+        leverage=coin["leverage"]
     )
 
 # =========================
