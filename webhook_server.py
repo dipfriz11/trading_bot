@@ -110,9 +110,9 @@ def webhook(hook_token):
             "has_position=", has_position)
             
         if state.get("cycle_active") and not has_position:
-            logger.warning(f"[SYNC] Manual close detected. Resetting cycle for {symbol}")
+            logger.info(f"[SYNC] No position detected for {symbol}, execution_engine will handle sync")
 
-            manager.reset_cycle()
+            # manual close detection handled in execution_engine.execute()
             #registry._save_state()
             
         

@@ -99,8 +99,15 @@ class ExecutionEngine:
             if p["positionSide"] == "SHORT" and float(p["positionAmt"]) != 0:
                 short_pos = p
 
-        # если позиций нет — выходим
+        # manual close detection
+        manager = self.symbol_registry.get_manager(self.current_symbol)
+
         if not long_pos and not short_pos:
+
+            if manager.get_state().get("cycle_active"):
+                logger.warning(f"[AUTO SYNC] Manual close detected for {self.current_symbol}")
+                self.handle_manual_close(self.current_symbol)
+
             return
         
         # UPDATE FUNDING
@@ -144,7 +151,38 @@ class ExecutionEngine:
                     self.current_symbol,
                     "buy",
                     abs(float(short_pos["positionAmt"]))
-                ) 
+                )
+
+            # ждём реального закрытия позиций на бирже
+            symbol_to_check = self.current_symbol
+            for attempt in range(10):
+                time.sleep(1)
+                if not self.exchange.has_open_position(symbol_to_check):
+                    logger.info(f"Positions confirmed closed for {symbol_to_check}")
+                    break
+                logger.warning(f"Waiting for positions to close... attempt {attempt + 1}/10")
+            else:
+                logger.error(f"Positions NOT closed after 10 attempts for {symbol_to_check}")
+
+            # расчёт реального результата цикла
+            trades = self.exchange.get_user_trades(symbol_to_check, self.profit_manager.cycle_start_time)
+            realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
+            exit_fees = sum(float(t["commission"]) for t in trades)
+            cycle_profit = (
+                realized_pnl
+                + self.profit_manager.funding_total
+                - self.profit_manager.entry_fees
+            )
+
+            print("\n========== REAL CYCLE RESULT ==========")
+            print(f"REALIZED PNL:   {realized_pnl:.6f}")
+            print(f"FUNDING:        {self.profit_manager.funding_total:.6f}")
+            print(f"ENTRY FEES:     {self.profit_manager.entry_fees:.6f}")
+            print(f"EXIT FEES:      {exit_fees:.6f}")
+            print("----------------------------------------")
+            print(f"CYCLE PROFIT:   {cycle_profit:.6f}")
+            print("========================================\n")
+            logger.info(f"CYCLE PROFIT for {symbol_to_check}: {cycle_profit:.6f}")
 
             # сбрасываем состояние после закрытия
             self.current_symbol = None
@@ -157,6 +195,15 @@ class ExecutionEngine:
 
         prev_long = self.last_sizes.get(symbol, {}).get("long", 0)
         prev_short = self.last_sizes.get(symbol, {}).get("short", 0)
+
+        # === AUTO MANUAL CLOSE DETECTION ===
+        state = manager.get_state()
+        has_position = self.exchange.has_open_position(symbol)
+
+        if state.get("cycle_active") and (prev_long > 0 or prev_short > 0) and not has_position:
+            logger.warning(f"[AUTO SYNC] Manual close detected for {symbol}")
+            self.handle_manual_close(symbol)
+            return
 
         new_long = state["long_size"]
         new_short = state["short_size"]
@@ -308,3 +355,27 @@ class ExecutionEngine:
                 )        
 
         logger.info(f"Execution complete for {symbol}")
+
+    def handle_manual_close(self, symbol: str):
+        symbol_to_check = symbol
+        trades = self.exchange.get_user_trades(symbol_to_check, self.profit_manager.cycle_start_time)
+        realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
+        exit_fees = sum(float(t["commission"]) for t in trades)
+        cycle_profit = (
+            realized_pnl
+            + self.profit_manager.funding_total
+            - self.profit_manager.entry_fees
+        )
+
+        print("\n========== REAL CYCLE RESULT ==========")
+        print(f"REALIZED PNL:   {realized_pnl:.6f}")
+        print(f"FUNDING:        {self.profit_manager.funding_total:.6f}")
+        print(f"ENTRY FEES:     {self.profit_manager.entry_fees:.6f}")
+        print("(EXIT FEES already included in realized PnL)")
+        print("----------------------------------------")
+        print(f"CYCLE PROFIT:   {cycle_profit:.6f}")
+        print("========================================\n")
+        logger.info(f"CYCLE PROFIT for {symbol_to_check}: {cycle_profit:.6f}")
+
+        manager = self.symbol_registry.get_manager(symbol)
+        manager.reset_cycle()

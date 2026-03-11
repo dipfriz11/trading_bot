@@ -4375,3 +4375,190 @@ UnboundLocalError: cannot access local variable 'manager' where it is not associ
 2026-03-09 20:32:10,809 | INFO | trading_bot | Incoming webhook request: token=my_token
 2026-03-09 20:32:10,809 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
 2026-03-09 20:32:10,809 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 21:27:15,609 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 21:27:15,609 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 21:27:15,609 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 21:27:15,610 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 21:27:15,612 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 21:27:17,759 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 21:27:17,767 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 21:28:45,013 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:28:45,014 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 21:28:45,014 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 21:28:46,298 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773257326.2981074}
+2026-03-11 21:28:46,304 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-11 21:28:46,304 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 21:28:46,305 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-11 21:28:46,306 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-11 21:28:50,743 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-11 21:28:54,283 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:28:54,541 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:29:55,513 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:29:55,514 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 21:29:55,514 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 21:30:24,244 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:30:24,244 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 21:30:24,245 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 21:30:24,507 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773257424.5077748}
+2026-03-11 21:30:24,508 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 21:30:24,509 | INFO | trading_bot | Averaging LONG +12.0 USDT
+2026-03-11 21:30:28,915 | INFO | trading_bot | Averaging SHORT +6.0 USDT
+2026-03-11 21:30:34,598 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:30:34,874 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:33:46,883 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:33:46,884 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 21:33:46,884 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 21:33:47,161 | WARNING | trading_bot | [SYNC] Manual close detected. Resetting cycle for SENTUSDT
+2026-03-11 21:33:47,162 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773257627.1623342}
+2026-03-11 21:33:47,163 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 21:33:47,164 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 21:33:47,168 | INFO | trading_bot | Opening SHORT 6.0 USDT
+2026-03-11 21:33:49,654 | INFO | trading_bot | Opening LONG 12 USDT
+2026-03-11 21:33:52,493 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:33:52,767 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:46:20,554 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 21:46:20,554 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 21:46:20,555 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 21:46:20,555 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 21:46:20,555 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 21:46:21,592 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 21:46:21,593 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 21:46:33,528 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:46:33,529 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 21:46:33,529 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 21:46:34,796 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773258394.7967865}
+2026-03-11 21:46:34,797 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 21:46:34,797 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 21:46:34,798 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-11 21:46:34,798 | INFO | trading_bot | Opening SHORT 6.0 USDT
+2026-03-11 21:46:37,485 | INFO | trading_bot | Opening LONG 12 USDT
+2026-03-11 21:46:40,434 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:46:41,498 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:46:57,526 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:46:57,526 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 21:46:57,527 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 21:46:57,792 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'UP', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773258417.792162}
+2026-03-11 21:46:57,792 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-11 21:46:57,792 | INFO | trading_bot | Averaging LONG +6.0 USDT
+2026-03-11 21:47:01,321 | INFO | trading_bot | Averaging SHORT +12.0 USDT
+2026-03-11 21:47:04,527 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:47:04,793 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:49:39,299 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 21:49:39,300 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 21:49:39,300 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 21:49:39,567 | WARNING | trading_bot | [SYNC] Manual close detected. Resetting cycle for SENTUSDT
+2026-03-11 21:49:39,834 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.075246
+2026-03-11 21:49:39,834 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773258579.834851}
+2026-03-11 21:49:39,835 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-11 21:49:39,835 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 21:49:39,835 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-11 21:49:42,773 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-11 21:49:46,538 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 21:49:46,802 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:07:15,217 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 22:07:15,217 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 22:07:15,217 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 22:07:15,219 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 22:07:15,220 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 22:07:16,237 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 22:07:16,238 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 22:07:29,660 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:07:29,661 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 22:07:29,661 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 22:07:30,664 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773259650.6643515}
+2026-03-11 22:07:30,664 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-11 22:07:30,665 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 22:07:30,665 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-11 22:07:30,666 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-11 22:07:33,255 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-11 22:07:36,151 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:07:36,428 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:07:55,337 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:07:55,338 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 22:07:55,339 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 22:07:55,615 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773259675.6152217}
+2026-03-11 22:07:55,615 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 22:07:55,615 | INFO | trading_bot | Averaging LONG +12.0 USDT
+2026-03-11 22:07:58,115 | INFO | trading_bot | Averaging SHORT +6.0 USDT
+2026-03-11 22:08:00,882 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:08:01,152 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:18:31,976 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 22:18:31,977 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 22:18:31,977 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 22:18:31,977 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 22:18:31,977 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 22:18:32,962 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 22:18:32,964 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 22:18:43,843 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:18:43,843 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 22:18:43,844 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 22:18:44,720 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773260324.7207267}
+2026-03-11 22:18:44,721 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 22:18:44,993 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-11 22:18:45,272 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.078220
+2026-03-11 22:18:45,542 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:23:08,223 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 22:23:08,228 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 22:23:08,228 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 22:23:08,229 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 22:23:08,229 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 22:23:09,309 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 22:23:09,313 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 22:23:20,671 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:23:20,672 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-11 22:23:20,672 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-11 22:23:21,540 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773260601.5407102}
+2026-03-11 22:23:21,541 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-11 22:23:21,541 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 22:23:21,541 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-11 22:23:21,542 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-11 22:23:24,205 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-11 22:23:27,045 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:23:27,328 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:23:39,284 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:23:39,285 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 22:23:39,285 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 22:23:39,574 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773260619.574489}
+2026-03-11 22:23:39,574 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 22:23:39,858 | INFO | trading_bot | Averaging LONG +12.0 USDT
+2026-03-11 22:23:42,458 | INFO | trading_bot | Averaging SHORT +6.0 USDT
+2026-03-11 22:23:45,309 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:23:45,591 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 22:23:50,493 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:23:50,494 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 22:23:50,494 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 22:57:06,988 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 22:57:06,988 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 22:57:06,988 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 22:57:06,989 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 22:57:06,989 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 22:57:07,970 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 22:57:07,974 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 22:57:18,883 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 22:57:18,884 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 22:57:18,884 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 22:57:19,733 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773262639.7337992}
+2026-03-11 22:57:19,734 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 22:57:20,007 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-11 22:57:20,284 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.096850
+2026-03-11 22:57:20,558 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 23:05:01,506 | INFO | trading_bot | SERVER STARTING...
+2026-03-11 23:05:01,506 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-11 23:05:01,506 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-11 23:05:01,506 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-11 23:05:01,507 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-11 23:05:02,485 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-11 23:05:02,486 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-11 23:05:12,403 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-11 23:05:12,403 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-11 23:05:12,404 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-11 23:05:13,756 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773263113.7569199}
+2026-03-11 23:05:13,757 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-11 23:05:14,037 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-11 23:05:14,038 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-11 23:05:14,038 | INFO | trading_bot | Opening SHORT 6.0 USDT
+2026-03-11 23:05:16,856 | INFO | trading_bot | Opening LONG 12 USDT
+2026-03-11 23:05:19,603 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 23:05:19,862 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-11 23:05:27,825 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-11 23:05:28,088 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.016950

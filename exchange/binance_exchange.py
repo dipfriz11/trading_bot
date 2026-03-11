@@ -175,7 +175,8 @@ class BinanceExchange(BaseExchange):
             side=side.upper(),
             type="MARKET",
             quantity=quantity,
-            positionSide=position_side
+            positionSide=position_side,
+            reduceOnly=True
         )
 
         print("Close order sent")
@@ -259,3 +260,14 @@ class BinanceExchange(BaseExchange):
             raise ValueError("Unknown order type")
 
         return notional * rate
+
+    def get_user_trades(self, symbol: str, start_time: int, limit: int = 100):
+        """
+        Возвращает сделки пользователя с Binance Futures.
+        Каждая сделка содержит: price, qty, commission, realizedPnl, side, time.
+        """
+        return self.client.futures_account_trades(
+            symbol=symbol,
+            startTime=start_time,
+            limit=limit
+        )
