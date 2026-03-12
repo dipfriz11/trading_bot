@@ -4562,3 +4562,106 @@ UnboundLocalError: cannot access local variable 'manager' where it is not associ
 2026-03-11 23:05:19,862 | INFO | trading_bot | Execution complete for SENTUSDT
 2026-03-11 23:05:27,825 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
 2026-03-11 23:05:28,088 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.016950
+2026-03-12 23:34:27,695 | INFO | trading_bot | SERVER STARTING...
+2026-03-12 23:34:27,696 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-12 23:34:27,696 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-12 23:34:27,696 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-12 23:34:27,703 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-12 23:34:28,913 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-12 23:34:28,914 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-12 23:34:38,622 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:34:38,623 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-12 23:34:38,623 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-12 23:34:39,446 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773351279.446898}
+2026-03-12 23:34:39,447 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-12 23:34:39,728 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-12 23:34:39,730 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-12 23:34:39,731 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-12 23:34:42,931 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-12 23:34:45,729 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:34:46,004 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:35:02,501 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:35:02,501 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-12 23:35:02,502 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-12 23:35:02,782 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773351302.782227}
+2026-03-12 23:35:02,782 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-12 23:35:03,065 | INFO | trading_bot | Averaging LONG +12.0 USDT
+2026-03-12 23:35:05,843 | INFO | trading_bot | Averaging SHORT +6.0 USDT
+2026-03-12 23:35:08,716 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:35:08,995 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:35:24,368 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:35:24,369 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-12 23:35:24,369 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-12 23:35:24,652 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 27.0, 'short_size': 54.0, 'cycle_number': 3, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773351324.652065}
+2026-03-12 23:35:24,652 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-12 23:35:24,932 | INFO | trading_bot | Averaging LONG +9.0 USDT
+2026-03-12 23:35:27,465 | INFO | trading_bot | Averaging SHORT +36.0 USDT
+2026-03-12 23:35:30,294 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:35:30,571 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:35:39,157 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-12 23:35:39,436 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.077660
+2026-03-12 23:42:03,317 | INFO | trading_bot | SERVER STARTING...
+2026-03-12 23:42:03,318 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-12 23:42:03,318 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-12 23:42:03,318 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-12 23:42:03,318 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-12 23:42:04,493 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-12 23:42:04,496 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-12 23:42:15,794 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:42:15,794 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-12 23:42:15,795 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-12 23:42:16,638 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'DOWN', 'long_size': 6.0, 'short_size': 12, 'cycle_number': 1, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773351736.638589}
+2026-03-12 23:42:16,638 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-12 23:42:16,912 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-12 23:42:16,913 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-12 23:42:16,914 | INFO | trading_bot | Opening SHORT 12 USDT
+2026-03-12 23:42:18,656 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-12 23:42:18,939 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: 0.000000
+2026-03-12 23:42:19,230 | INFO | trading_bot | WebSocket closed intentionally. No reconnect.
+2026-03-12 23:42:19,443 | INFO | trading_bot | Opening LONG 6.0 USDT
+2026-03-12 23:42:22,249 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:42:22,524 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:42:35,451 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:42:35,452 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-12 23:42:35,452 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-12 23:42:35,732 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773351755.7328947}
+2026-03-12 23:42:35,733 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-12 23:42:36,011 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-12 23:42:36,012 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-12 23:42:36,013 | INFO | trading_bot | Opening SHORT 6.0 USDT
+2026-03-12 23:42:38,551 | INFO | trading_bot | Opening LONG 12 USDT
+2026-03-12 23:42:41,537 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:42:41,811 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:43:18,174 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-12 23:43:18,456 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.025500
+2026-03-12 23:43:18,727 | INFO | trading_bot | WebSocket closed intentionally. No reconnect.
+2026-03-12 23:47:55,458 | INFO | trading_bot | SERVER STARTING...
+2026-03-12 23:47:55,458 | INFO | trading_bot | STEP 1: Reading env variables
+2026-03-12 23:47:55,459 | INFO | trading_bot | STEP 2: Creating strategy config
+2026-03-12 23:47:55,459 | INFO | trading_bot | STEP 3: Creating registry
+2026-03-12 23:47:55,459 | INFO | trading_bot | STEP 4: Creating exchange
+2026-03-12 23:47:56,686 | INFO | trading_bot | STEP 5: Creating execution engine
+2026-03-12 23:47:56,687 | INFO | trading_bot | STEP 6: Initialization complete
+2026-03-12 23:48:09,711 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:48:09,711 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'buy'}
+2026-03-12 23:48:09,711 | INFO | trading_bot | Signal received: buy SENTUSDT
+2026-03-12 23:48:10,560 | INFO | trading_bot | Executing order for SENTUSDT | side=buy | state={'cycle_active': True, 'bias': 'UP', 'long_size': 12, 'short_size': 6.0, 'cycle_number': 1, 'blocked': False, 'last_signal': 'buy', 'last_signal_time': 1773352090.5601764}
+2026-03-12 23:48:10,560 | INFO | trading_bot | --- EXECUTION SENTUSDT | buy ---
+2026-03-12 23:48:10,836 | INFO | trading_bot | Starting new cycle with hedge
+2026-03-12 23:48:10,837 | INFO | trading_bot | Started mark price monitor for SENTUSDT
+2026-03-12 23:48:10,838 | INFO | trading_bot | Opening SHORT 6.0 USDT
+2026-03-12 23:48:13,393 | INFO | trading_bot | Opening LONG 12 USDT
+2026-03-12 23:48:16,448 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:48:16,721 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:48:30,523 | INFO | trading_bot | Incoming webhook request: token=my_token
+2026-03-12 23:48:30,524 | INFO | trading_bot | Webhook payload: {'secret': 'my_secret', 'symbol': 'SENTUSDT', 'side': 'sell'}
+2026-03-12 23:48:30,525 | INFO | trading_bot | Signal received: sell SENTUSDT
+2026-03-12 23:48:30,801 | INFO | trading_bot | Executing order for SENTUSDT | side=sell | state={'cycle_active': True, 'bias': 'UP', 'long_size': 18.0, 'short_size': 18.0, 'cycle_number': 2, 'blocked': False, 'last_signal': 'sell', 'last_signal_time': 1773352110.8013995}
+2026-03-12 23:48:30,801 | INFO | trading_bot | --- EXECUTION SENTUSDT | sell ---
+2026-03-12 23:48:31,081 | INFO | trading_bot | Averaging LONG +6.0 USDT
+2026-03-12 23:48:33,608 | INFO | trading_bot | Averaging SHORT +12.0 USDT
+2026-03-12 23:48:36,633 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:48:36,908 | INFO | trading_bot | Execution complete for SENTUSDT
+2026-03-12 23:49:09,171 | WARNING | trading_bot | [AUTO SYNC] Manual close detected for SENTUSDT
+2026-03-12 23:49:09,455 | INFO | trading_bot | CYCLE PROFIT for SENTUSDT: -0.031750
+2026-03-12 23:49:09,779 | INFO | trading_bot | WebSocket closed intentionally. No reconnect.

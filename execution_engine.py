@@ -20,6 +20,8 @@ class ExecutionEngine:
         self.mark_price = 0.0
         self.last_total_net = None
         self.price_socket_thread = None
+        self.ws = None
+        self.stop_requested = False
 
         from profit_manager import ProfitManager
 
@@ -61,6 +63,10 @@ class ExecutionEngine:
             logger.error(f"WebSocket error: {error}")
 
         def on_close(ws, close_status_code, close_msg):
+            if self.stop_requested:
+                logger.info("WebSocket closed intentionally. No reconnect.")
+                self.stop_requested = False
+                return
             logger.warning("WebSocket closed. Reconnecting in 3 seconds...")
             time.sleep(3)
             self.start_price_monitor(symbol)
@@ -73,6 +79,7 @@ class ExecutionEngine:
           on_error=on_error,
           on_close=on_close
         )
+        self.ws = ws
 
         self.price_socket_thread = threading.Thread(target=ws.run_forever)
         self.price_socket_thread.daemon = True
@@ -379,3 +386,11 @@ class ExecutionEngine:
 
         manager = self.symbol_registry.get_manager(symbol)
         manager.reset_cycle()
+
+        self.stop_requested = True
+
+        if self.ws:
+            self.ws.close()
+            self.ws = None
+
+        self.price_socket_thread = None
