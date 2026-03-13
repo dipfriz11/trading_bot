@@ -87,6 +87,24 @@ class ExecutionEngine:
 
         logger.info(f"Started mark price monitor for {symbol}")
 
+    def restore_price_monitor(self):
+        for symbol, manager in self.symbol_registry.registry.items():
+            state = manager.get_state()
+
+            if not state.get("cycle_active"):
+                continue
+
+            if not self.exchange.has_open_position(symbol):
+                continue
+
+            self.last_sizes[symbol] = {
+                "long": state["long_size"],
+                "short": state["short_size"]
+            }
+
+            logger.info(f"[BOOT SYNC] Restoring price monitor for {symbol}")
+            self.start_price_monitor(symbol)
+
     def check_close_condition(self):
 
         if not self.current_symbol:
@@ -386,6 +404,7 @@ class ExecutionEngine:
 
         manager = self.symbol_registry.get_manager(symbol)
         manager.reset_cycle()
+        self.last_sizes.pop(symbol, None)
 
         self.stop_requested = True
 

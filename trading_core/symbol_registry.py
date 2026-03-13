@@ -1,8 +1,7 @@
-import json
-import os
 import threading
 
 from trading_core.position_manager import PositionManager, CycleConfig
+from storage.sqlite_storage import SQLiteStorage
 
 
 class SymbolRegistry:
@@ -12,7 +11,7 @@ class SymbolRegistry:
         self.registry = {}
         self._lock = threading.RLock()  # ← ВАЖНО: RLock вместо Lock
 
-        self.storage_file = "state.json"
+        self.storage = SQLiteStorage()
         self._load_state()
         
     def get_manager(self, symbol: str) -> PositionManager:
@@ -44,26 +43,18 @@ class SymbolRegistry:
 
     # === СОХРАНЕНИЕ СОСТОЯНИЯ ===
     def _save_state(self):
-         with self._lock:
-             data = self.get_all_states()
+        with self._lock:
+            data = self.get_all_states()
 
-             temp_file = self.storage_file + ".tmp"
-
-             with open(temp_file, "w") as f:
-                  json.dump(data, f)
-
-             os.replace(temp_file, self.storage_file)
+            for symbol, state in data.items():
+                self.storage.save_state(symbol, state)
 
     # === ЗАГРУЗКА СОСТОЯНИЯ ===
     def _load_state(self):
         with self._lock:
 
-             if not os.path.exists(self.storage_file):
-                  return
-
              try:
-                  with open(self.storage_file, "r") as f:
-                       data = json.load(f)
+                  data = self.storage.load_all_states()
 
                   for symbol, state in data.items():
                       manager = self.get_manager(symbol)

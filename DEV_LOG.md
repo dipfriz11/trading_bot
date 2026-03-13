@@ -117,3 +117,35 @@ used margin
 в
 
 execution_engine.py → execute()
+
+## 2026-03-12
+
+### Stabilization after websocket / restart work
+
+Today we fixed several critical stability issues.
+
+#### Fixed
+- Manual close detection works correctly
+- WebSocket stops correctly after manual close
+- No unwanted reconnect after cycle reset
+- Cycle reset works correctly
+- Profit monitoring works again
+
+#### Important discovery
+state.json can corrupt test results.
+
+If state.json contains old cycle data:
+- cycle numbers may be wrong
+- restore logic may behave incorrectly
+
+Temporary solution during testing:
+delete state.json before running tests.
+
+#### Current stable version
+v0.6.1
+
+#### Next tasks
+1. Redesign state.json persistence logic
+2. Implement safe restart recovery
+3. Restore positions after restart
+4. Continue architecture development for multi-exchange system

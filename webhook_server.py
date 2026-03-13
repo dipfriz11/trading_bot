@@ -110,12 +110,11 @@ def webhook(hook_token):
             "has_position=", has_position)
             
         if state.get("cycle_active") and not has_position:
-            logger.info(f"[SYNC] No position detected for {symbol}, execution_engine will handle sync")
+            logger.warning(f"[SYNC] Manual close detected for {symbol} — resetting cycle before new signal")
+            manager.reset_cycle()
+            registry._save_state()
+            state = manager.get_state()
 
-            # manual close detection handled in execution_engine.execute()
-            #registry._save_state()
-            
-        
         accepted = manager.apply_signal(side)
 
         if not accepted:
@@ -127,7 +126,7 @@ def webhook(hook_token):
 
         manager.last_signal_time = time.time()
 
-        #registry._save_state()
+        registry._save_state()
 
         state = manager.get_state()
 
@@ -239,9 +238,12 @@ def initialize():
     logger.info("STEP 5: Creating execution engine")
     engine = ExecutionEngine(exchange, registry)
 
+    logger.info("STEP 6: Restoring price monitors")
+    engine.restore_price_monitor()
+
     app.config["engine"] = engine
 
-    logger.info("STEP 6: Initialization complete")
+    logger.info("STEP 7: Initialization complete")
 
     return PORT
 

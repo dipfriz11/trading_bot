@@ -17,3 +17,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime files
+bot.db
+bot.db-journal
+bot.log
