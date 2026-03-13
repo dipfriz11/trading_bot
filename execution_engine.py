@@ -90,11 +90,20 @@ class ExecutionEngine:
     def restore_price_monitor(self):
         for symbol, manager in self.symbol_registry.registry.items():
             state = manager.get_state()
+            has_position = self.exchange.has_open_position(symbol)
 
-            if not state.get("cycle_active"):
+            # CASE 1: state says active but no position on exchange
+            if state.get("cycle_active") and not has_position:
+                logger.warning(f"[BOOT SYNC] State mismatch detected for {symbol}: cycle_active=True but no exchange position. Resetting cycle.")
+                manager.reset_cycle()
+                self.last_sizes.pop(symbol, None)
                 continue
 
-            if not self.exchange.has_open_position(symbol):
+            # CASE 2: position exists but cycle is inactive
+            if not state.get("cycle_active") and has_position:
+                logger.warning(f"[BOOT SYNC] Exchange position exists but cycle is inactive for {symbol}")
+
+            if not state.get("cycle_active"):
                 continue
 
             self.last_sizes[symbol] = {
