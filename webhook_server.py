@@ -124,6 +124,7 @@ def webhook(hook_token):
         if state.get("cycle_active") and not has_position:
             logger.warning(f"[SYNC] Manual close detected for {symbol} — resetting cycle before new signal")
             manager.reset_cycle()
+            engine.last_sizes.pop(symbol, None)
             registry._save_state()
             state = manager.get_state()
 

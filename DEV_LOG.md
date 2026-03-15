@@ -281,3 +281,233 @@ cycle_active = True
 * multi-exchange
 * multi-account
 * управление торговыми инструментами через базу данных.
+
+
+DEV LOG — 15.03.2026
+Версия
+
+v0.7
+
+symbol registry + DB symbol control + restart-safe symbol loading
+
+Создано:
+
+commit: v0.7
+tag: v0.7
+branch: stable_v0.7
+Основные изменения за день
+1. Реализована multi-symbol архитектура
+
+Добавлена полноценная система управления символами через БД.
+
+Таблица symbols (SQLite)
+
+Поля:
+
+symbol
+exchange
+account
+strategy
+active
+created_at
+
+Теперь бот:
+
+загружает активные символы из БД
+
+создаёт manager для каждого символа
+
+работает multi-symbol
+
+Лог при старте:
+
+Loading active symbols from DB
+Symbol manager initialized: BTCUSDT
+Symbol manager initialized: XRPUSDT
+2. Добавлена двойная система проверки manual close
+
+Manual close теперь определяется двумя механизмами:
+
+1️⃣ webhook_server.py
+has_open_position()
+cycle_active
+
+если нет позиции:
+
+reset_cycle()
+2️⃣ execution_engine.py
+prev_long
+prev_short
+has_open_position()
+
+если:
+
+cycle_active
+prev position > 0
+no exchange position
+
+→
+
+handle_manual_close()
+3. Реализован mark price monitor
+
+Для каждого активного цикла запускается:
+
+start_price_monitor(symbol)
+
+Он:
+
+получает mark price
+
+считает PNL
+
+выводит:
+
+PROFIT DEBUG
+CYCLE INFO
+TARGET CHECK
+4. Реализовано восстановление после рестарта
+
+Метод:
+
+restore_price_monitor()
+
+Логика:
+
+если cycle_active и позиция есть
+→ восстановить monitor
+
+если cycle_active и позиции нет
+→ reset_cycle()
+
+Это защищает от:
+
+restart сервера
+рассинхронизации состояния
+5. Исправлена проблема symbol_not_in_config
+
+Выявлено:
+
+webhook проверял БД
+build_cycle_config проверял config.py
+
+Это приводило к конфликту.
+
+Решение:
+
+добавление символа в COINS
+
+Протестировано на:
+
+XRPUSDT
+6. Проведены тесты manual close
+
+Тест сценариев:
+
+SELL → manual close → BUY
+BUY → manual close → SELL
+
+Результаты:
+
+✔ новый сигнал после manual close открывает позиции
+
+Но выявлен баг:
+
+ложный AUTO SYNC во время старта нового цикла
+Обнаруженный баг
+
+Во время старта нового цикла иногда происходит:
+
+Starting new cycle
+start_price_monitor()
+opening orders
+↓
+AUTO SYNC manual close detected
+↓
+handle_manual_close()
+↓
+monitor останавливается
+
+Из-за этого:
+
+WebSocket closed intentionally
+
+и перестаёт обновляться:
+
+PROFIT DEBUG
+CYCLE INFO
+Предварительная причина
+
+Состояние:
+
+execution_engine.last_sizes
+
+не очищается при reset через webhook.
+
+Поэтому:
+
+prev_long / prev_short > 0
+
+остаётся от предыдущего цикла и вызывает ложный manual close.
+
+План исправления
+
+Необходимо изменить:
+
+webhook_server.py
+
+чтобы при:
+
+reset_cycle()
+
+очищалось также:
+
+execution_engine.last_sizes[symbol]
+Текущее состояние проекта
+
+Архитектура:
+
+webhook_server
+↓
+symbol_registry
+↓
+execution_engine
+↓
+exchange
+↓
+profit_manager
+
+Поддерживается:
+
+multi-symbol
+restart-safe
+manual close detection
+cycle recovery
+TODO (следующий этап)
+
+1️⃣ Исправить баг ложного AUTO SYNC
+
+reset last_sizes при reset_cycle
+
+2️⃣ Проверить сценарий
+
+manual close
+↓
+новый сигнал
+↓
+start cycle
+↓
+monitor работает
+
+3️⃣ Проверить continuous profit monitor
+
+PROFIT DEBUG
+CYCLE INFO
+
+4️⃣ Подготовить архитектуру к production
+
+Будущие задачи:
+
+multi-account
+multi-exchange
+configurable strategies
