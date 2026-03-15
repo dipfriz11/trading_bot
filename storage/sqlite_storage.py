@@ -26,6 +26,17 @@ class SQLiteStorage:
                         last_signal_time REAL
                     )
                 """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS symbols (
+                        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol      TEXT NOT NULL,
+                        exchange    TEXT NOT NULL,
+                        account     TEXT NOT NULL,
+                        strategy    TEXT NOT NULL,
+                        active      INTEGER NOT NULL DEFAULT 0,
+                        created_at  INTEGER
+                    )
+                """)
                 conn.commit()
             finally:
                 conn.close()
@@ -86,3 +97,77 @@ class SQLiteStorage:
                 conn.commit()
             finally:
                 conn.close()
+
+    def create_symbol(self, symbol: str, exchange: str, account: str, strategy: str):
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.execute("""
+                    INSERT INTO symbols (symbol, exchange, account, strategy, active, created_at)
+                    VALUES (?, ?, ?, ?, 0, strftime('%s','now'))
+                """, (symbol, exchange, account, strategy))
+                conn.commit()
+            finally:
+                conn.close()
+
+    def activate_symbol(self, symbol: str):
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.execute("UPDATE symbols SET active = 1 WHERE symbol = ?", (symbol,))
+                conn.commit()
+            finally:
+                conn.close()
+
+    def deactivate_symbol(self, symbol: str):
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.execute("UPDATE symbols SET active = 0 WHERE symbol = ?", (symbol,))
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_symbol(self, symbol: str) -> dict | None:
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                cursor = conn.execute(
+                    "SELECT symbol, exchange, account, strategy, active FROM symbols WHERE symbol = ?",
+                    (symbol,)
+                )
+                row = cursor.fetchone()
+            finally:
+                conn.close()
+        if row is None:
+            return None
+        return {
+            "symbol":   row["symbol"],
+            "exchange": row["exchange"],
+            "account":  row["account"],
+            "strategy": row["strategy"],
+            "active":   bool(row["active"]),
+        }
+
+    def get_active_symbols(self) -> list:
+        with self._lock:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                cursor = conn.execute(
+                    "SELECT symbol, exchange, account, strategy, active FROM symbols WHERE active = 1"
+                )
+                rows = cursor.fetchall()
+            finally:
+                conn.close()
+        return [
+            {
+                "symbol":   row["symbol"],
+                "exchange": row["exchange"],
+                "account":  row["account"],
+                "strategy": row["strategy"],
+                "active":   bool(row["active"]),
+            }
+            for row in rows
+        ]

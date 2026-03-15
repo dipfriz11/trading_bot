@@ -10,6 +10,7 @@ from trading_core.position_manager import CycleConfig
 from trading_core.symbol_registry import SymbolRegistry
 from logger_config import setup_logger
 from config import COINS
+from storage.sqlite_storage import SQLiteStorage
 
 
 # =========================
@@ -32,8 +33,9 @@ def webhook(hook_token):
 
     registry = app.config.get("registry")
     engine = app.config.get("engine")
+    storage = app.config.get("storage")
 
-    if registry is None or engine is None:
+    if registry is None or engine is None or storage is None:
         return jsonify({"error": "server not initialized"}), 500
 
     try:
@@ -61,6 +63,16 @@ def webhook(hook_token):
 
         symbol = symbol.replace(".P", "").upper()
         side = side.lower()
+
+        symbol_cfg = storage.get_symbol(symbol)
+
+        if not symbol_cfg:
+            logger.warning(f"[SYMBOL] {symbol} not registered — ignoring signal")
+            return jsonify({"status": "ignored", "reason": "symbol_not_registered"})
+
+        if not symbol_cfg["active"]:
+            logger.info(f"[SYMBOL] {symbol} inactive — ignoring signal")
+            return jsonify({"status": "ignored", "reason": "symbol_inactive"})
 
         cfg = build_cycle_config(symbol)
         if not cfg:
@@ -237,6 +249,17 @@ def initialize():
 
     logger.info("STEP 5: Creating execution engine")
     engine = ExecutionEngine(exchange, registry)
+
+    storage = SQLiteStorage("bot.db")
+    app.config["storage"] = storage
+
+    active_symbols = storage.get_active_symbols()
+    logger.info(f"Loading active symbols from DB: {len(active_symbols)}")
+
+    for s in active_symbols:
+        symbol = s["symbol"]
+        registry.get_manager(symbol)
+        logger.info(f"Symbol manager initialized: {symbol}")
 
     logger.info("STEP 6: Restoring price monitors")
     engine.restore_price_monitor()
