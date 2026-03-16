@@ -511,3 +511,17 @@ CYCLE INFO
 multi-account
 multi-exchange
 configurable strategies
+
+TODO: broken hedge recovery
+
+Если обнаружена ситуация:
+LONG > 0 and SHORT = 0
+или
+SHORT > 0 and LONG = 0
+
+рассмотреть алгоритм:
+
+1. подтвердить состояние через несколько API checks
+2. если подтверждено:
+   close remaining leg
+3. завершить цикл

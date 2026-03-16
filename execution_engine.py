@@ -17,11 +17,11 @@ class ExecutionEngine:
         self.current_symbol = None
         self.current_long_qty = 0.0
         self.current_short_qty = 0.0
-        self.mark_price = 0.0
-        self.last_total_net = None
-        self.price_socket_thread = None
-        self.ws = None
-        self.stop_requested = False
+        self.mark_price = {}
+        self.last_total_net = {}
+        self.price_socket_thread = {}
+        self.ws = {}
+        self.stop_requested = {}
 
         from profit_manager import ProfitManager
 
@@ -32,24 +32,21 @@ class ExecutionEngine:
 
     def start_price_monitor(self, symbol: str):
 
-        if self.price_socket_thread:
+        if self.price_socket_thread.get(symbol):
             return
-        
+
         self.current_symbol = symbol
 
         def on_message(ws, message):
             data = json.loads(message)
 
             if "p" in data:
-                self.mark_price = float(data["p"])
+                self.mark_price[symbol] = float(data["p"])
 
                 # Проверяем закрытие НА КАЖДОМ ТИКЕ
-                self.check_close_condition()
+                self.check_close_condition(symbol)
 
-                if not self.current_symbol:
-                    return
-
-                manager = self.symbol_registry.get_manager(self.current_symbol)
+                manager = self.symbol_registry.get_manager(symbol)
                 if not manager:
                     return
 
@@ -63,9 +60,9 @@ class ExecutionEngine:
             logger.error(f"WebSocket error: {error}")
 
         def on_close(ws, close_status_code, close_msg):
-            if self.stop_requested:
+            if self.stop_requested.get(symbol):
                 logger.info("WebSocket closed intentionally. No reconnect.")
-                self.stop_requested = False
+                self.stop_requested[symbol] = False
                 return
             logger.warning("WebSocket closed. Reconnecting in 3 seconds...")
             time.sleep(3)
@@ -79,11 +76,11 @@ class ExecutionEngine:
           on_error=on_error,
           on_close=on_close
         )
-        self.ws = ws
+        self.ws[symbol] = ws
 
-        self.price_socket_thread = threading.Thread(target=ws.run_forever)
-        self.price_socket_thread.daemon = True
-        self.price_socket_thread.start()
+        self.price_socket_thread[symbol] = threading.Thread(target=ws.run_forever)
+        self.price_socket_thread[symbol].daemon = True
+        self.price_socket_thread[symbol].start()
 
         logger.info(f"Started mark price monitor for {symbol}")
 
@@ -112,17 +109,15 @@ class ExecutionEngine:
             }
 
             logger.info(f"[BOOT SYNC] Restoring price monitor for {symbol}")
+            self.profit_manager.target_profit = manager.config.target_profit
             self.start_price_monitor(symbol)
 
-    def check_close_condition(self):
+    def check_close_condition(self, symbol: str):
 
-        if not self.current_symbol:
+        if not self.mark_price.get(symbol):
             return
 
-        if self.mark_price == 0:
-            return
-
-        positions = self.exchange.get_positions(self.current_symbol)
+        positions = self.exchange.get_positions(symbol)
 
         long_pos = None
         short_pos = None
@@ -134,33 +129,33 @@ class ExecutionEngine:
                 short_pos = p
 
         # manual close detection
-        manager = self.symbol_registry.get_manager(self.current_symbol)
+        manager = self.symbol_registry.get_manager(symbol)
 
         if not long_pos and not short_pos:
 
             if manager.get_state().get("cycle_active"):
-                logger.warning(f"[AUTO SYNC] Manual close detected for {self.current_symbol}")
-                self.handle_manual_close(self.current_symbol)
+                logger.warning(f"[AUTO SYNC] Manual close detected for {symbol}")
+                self.handle_manual_close(symbol)
 
             return
-        
+
         # UPDATE FUNDING
-        self.profit_manager.update_funding(self.current_symbol)
+        self.profit_manager.update_funding(symbol)
 
         total_net = self.profit_manager.calculate_total_net(
-            self.current_symbol,
+            symbol,
             long_pos,
             short_pos
         )
 
         # печатаем только если total_net изменился
-        if self.last_total_net is None or abs(total_net - self.last_total_net) > 0.000001:
+        if self.last_total_net.get(symbol) is None or abs(total_net - self.last_total_net.get(symbol)) > 0.000001:
 
             print("----- PROFIT DEBUG -----")
             print("TOTAL NET:", total_net)
             print("------------------------")
 
-            self.last_total_net = total_net
+            self.last_total_net[symbol] = total_net
 
         # TARGET HIT
         if total_net >= self.profit_manager.target_profit:
@@ -175,20 +170,20 @@ class ExecutionEngine:
 
             if long_pos:
                 self.exchange.close_position(
-                    self.current_symbol,
+                    symbol,
                     "sell",
                     abs(float(long_pos["positionAmt"]))
                 )
 
             if short_pos:
                 self.exchange.close_position(
-                    self.current_symbol,
+                    symbol,
                     "buy",
                     abs(float(short_pos["positionAmt"]))
                 )
 
             # ждём реального закрытия позиций на бирже
-            symbol_to_check = self.current_symbol
+            symbol_to_check = symbol
             for attempt in range(10):
                 time.sleep(1)
                 if not self.exchange.has_open_position(symbol_to_check):
@@ -219,9 +214,8 @@ class ExecutionEngine:
             logger.info(f"CYCLE PROFIT for {symbol_to_check}: {cycle_profit:.6f}")
 
             # сбрасываем состояние после закрытия
-            self.current_symbol = None
-            self.last_total_net = None
-            self.price_socket_thread = None
+            self.last_total_net[symbol] = None
+            self.price_socket_thread[symbol] = None
 
     def execute(self, symbol: str, side: str, state: dict):
         manager = self.symbol_registry.get_manager(symbol)
@@ -415,10 +409,10 @@ class ExecutionEngine:
         manager.reset_cycle()
         self.last_sizes.pop(symbol, None)
 
-        self.stop_requested = True
+        self.stop_requested[symbol] = True
 
-        if self.ws:
-            self.ws.close()
-            self.ws = None
+        if self.ws.get(symbol):
+            self.ws[symbol].close()
+            self.ws[symbol] = None
 
-        self.price_socket_thread = None
+        self.price_socket_thread[symbol] = None
