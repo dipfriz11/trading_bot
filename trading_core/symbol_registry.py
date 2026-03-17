@@ -66,6 +66,10 @@ class SymbolRegistry:
                       manager.cycle_number = state["cycle_number"]
                       manager.blocked = state["blocked"]
                       manager.last_signal = state.get("last_signal")
+                      if state.get("cycle_active"):
+                          manager.cycle_target_profit = state.get("cycle_target_profit", manager.config.target_profit)
+                      else:
+                          manager.cycle_target_profit = 0.0
 
              except Exception as e:
                   print("State load error:", e)

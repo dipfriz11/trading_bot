@@ -26,6 +26,7 @@ class PositionManager:
         self.profit_manager = ProfitManager(
             taker_fee=0.0004
         )
+        self.cycle_target_profit = 0.0
 
     def reset_cycle(self):
         self.cycle_active = False
@@ -37,6 +38,7 @@ class PositionManager:
         self.blocked = False
         self.processing = False
         self.last_signal_time = 0
+        self.cycle_target_profit = 0.0
 
     def report_cycle_close(
         self,
@@ -72,6 +74,7 @@ class PositionManager:
 
         self.cycle_number = 1
         self.last_signal = side
+        self.cycle_target_profit = self.config.target_profit
 
     # === ПРИМЕНЕНИЕ СИГНАЛА ===
 
@@ -144,4 +147,5 @@ class PositionManager:
             "blocked": self.blocked,
             "last_signal": self.last_signal,
             "last_signal_time": self.last_signal_time,
+            "cycle_target_profit": self.cycle_target_profit,
         }

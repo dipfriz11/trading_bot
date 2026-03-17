@@ -69,7 +69,7 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": 0.001,
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,

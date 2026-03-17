@@ -47,7 +47,7 @@ class ExecutionEngine:
                 print()
                 print("===== CYCLE INFO =====")
                 print(f"CYCLE: {manager.cycle_number}")
-                print(f"TARGET PROFIT: {manager.config.target_profit}")
+                print(f"TARGET PROFIT: {manager.cycle_target_profit}")
                 print("======================")
 
         def on_error(ws, error):
@@ -103,7 +103,6 @@ class ExecutionEngine:
             }
 
             logger.info(f"[BOOT SYNC] Restoring price monitor for {symbol}")
-            manager.profit_manager.target_profit = manager.config.target_profit
             self.start_price_monitor(symbol)
 
     def check_close_condition(self, symbol: str):
@@ -182,7 +181,7 @@ class ExecutionEngine:
             self.last_total_net[symbol] = total_net
 
         # TARGET HIT
-        if total_net >= manager.profit_manager.target_profit:
+        if total_net >= manager.cycle_target_profit:
 
             print("====== CYCLE CLOSED ======")
             print("FINAL NET:", total_net)
@@ -387,20 +386,18 @@ class ExecutionEngine:
             )
 
             if long_pos:
-                self.exchange.open_market_position(
+                self.exchange.close_position(
                     symbol,
                     "sell",
-                    abs(float(long_pos["positionAmt"])),
-                    manager.config.leverage
+                    abs(float(long_pos["positionAmt"]))
                 )
 
             if short_pos:
-                self.exchange.open_market_position(
+                self.exchange.close_position(
                     symbol,
                     "buy",
-                    abs(float(short_pos["positionAmt"])),
-                    manager.config.leverage
-                )        
+                    abs(float(short_pos["positionAmt"]))
+                )
 
         logger.info(f"Execution complete for {symbol}")
 

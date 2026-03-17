@@ -176,7 +176,6 @@ class BinanceExchange(BaseExchange):
             type="MARKET",
             quantity=quantity,
             positionSide=position_side,
-            reduceOnly=True
         )
 
         print("Close order sent")
