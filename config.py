@@ -63,6 +63,19 @@ COINS = {
         "leverage": 10
     },
 
+    "ANIMEUSDT": {
+        "base_size": 12,
+        "hedge_ratio": 0.5,
+        "major_multiplier": 2.0,
+        "minor_multiplier": 0.5,
+        "auto_close": True,
+        "target_profit": 0.5,
+        "repeat_mode": "ignore",
+        "max_cycles": 5,
+        "max_total_exposure": None,
+        "leverage": 10
+    },
+
     "BANANAS31USDT": {
         "base_size": 12,
         "hedge_ratio": 0.5,

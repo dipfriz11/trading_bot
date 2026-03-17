@@ -525,3 +525,213 @@ SHORT > 0 and LONG = 0
 2. если подтверждено:
    close remaining leg
 3. завершить цикл
+
+📘 DevLog — 16.03.2026
+Версия
+v0.7.1
+Основная задача дня
+
+Завершение и стабилизация multi-symbol архитектуры и исправление ошибок BOOT SYNC после рестарта.
+
+Что было реализовано
+1. Multi-symbol архитектура
+
+В проект добавлена полноценная поддержка нескольких символов.
+
+Теперь бот может одновременно работать с несколькими инструментами:
+
+BTCUSDT
+XRPUSDT
+SENTUSDT
+...
+
+Реализовано:
+
+SymbolRegistry
+
+отдельный PositionManager для каждого символа
+
+отдельный price monitor для каждого символа
+
+корректная маршрутизация сигналов через webhook
+
+Архитектура:
+
+ExecutionEngine
+    │
+    └── SymbolRegistry
+            │
+            ├── PositionManager (BTC)
+            ├── PositionManager (XRP)
+            └── PositionManager (SENT)
+2. Symbol DB управление
+
+Реализовано хранение символов в SQLite:
+
+symbols table
+
+поля:
+
+symbol
+exchange
+account
+strategy
+active
+created_at
+
+Добавлено:
+
+get_active_symbols()
+create_symbol()
+
+Теперь бот автоматически загружает активные символы при старте.
+
+3. Restart-safe symbol loading
+
+После рестарта бот:
+
+1. читает активные символы из DB
+2. создаёт SymbolManager для каждого
+3. запускает BOOT SYNC
+
+Это позволяет переживать:
+
+server restart
+bot crash
+manual restart
+4. BOOT SYNC восстановление позиций
+
+Добавлена логика восстановления позиций после рестарта.
+
+Алгоритм:
+
+restore_price_monitor()
+
+for each symbol:
+    check exchange position
+
+Cases:
+
+CASE 1
+cycle_active = True
+exchange position = False
+→ reset_cycle()
+
+CASE 2
+cycle_active = False
+exchange position = True
+→ warning
+
+CASE 3
+cycle_active = True
+exchange position = True
+→ restore monitor
+5. Исправлен критический баг BOOT SYNC
+
+Проблема:
+
+После рестарта:
+
+TARGET PROFIT = 0.000000
+
+Причина:
+
+ProfitManager.target_profit
+не восстанавливался
+
+так как start_cycle() не вызывался.
+
+FIX
+
+В restore_price_monitor() добавлено:
+
+self.profit_manager.target_profit = manager.config.target_profit
+
+Перед запуском монитора:
+
+logger.info("[BOOT SYNC] Restoring price monitor")
+
+Теперь после рестарта:
+
+TARGET PROFIT = 0.5
+
+восстанавливается корректно.
+
+6. Проверен restart recovery
+
+Проведены тесты:
+
+тест 1
+open position
+restart bot
+
+результат:
+
+monitor restored
+cycle continues
+тест 2
+restart
+manual close
+
+результат:
+
+manual close detected
+cycle reset
+тест 3
+multi symbol test
+XRP
+BTC
+SENT
+
+позиции восстанавливаются независимо.
+
+Итог состояния системы
+
+Сейчас стабильно работают:
+
+✔ multi-symbol architecture
+✔ symbol registry
+✔ SQLite symbol storage
+✔ restart recovery
+✔ BOOT SYNC
+✔ manual close detection
+✔ restart-safe monitors
+✔ webhook routing per symbol
+Известное архитектурное ограничение
+
+Сейчас:
+
+ProfitManager один на весь ExecutionEngine
+
+Поэтому:
+
+target_profit общий
+
+Это следующая задача архитектуры.
+
+План на завтра
+
+Главная задача:
+
+ProfitManager → per symbol
+Архитектура станет
+ExecutionEngine
+    │
+    └── SymbolRegistry
+            │
+            └── PositionManager
+                    │
+                    └── ProfitManager
+
+То есть:
+
+ProfitManager у каждого символа свой
+Это позволит
+
+Настраивать:
+
+BTCUSDT   target_profit = 2
+XRPUSDT   target_profit = 0.5
+SENTUSDT  target_profit = 1
+
+и циклы будут полностью независимы.

@@ -23,12 +23,6 @@ class ExecutionEngine:
         self.ws = {}
         self.stop_requested = {}
 
-        from profit_manager import ProfitManager
-
-        self.profit_manager = ProfitManager(
-             exchange=self.exchange,
-             taker_fee=0.0004
-        )
 
     def start_price_monitor(self, symbol: str):
 
@@ -109,7 +103,7 @@ class ExecutionEngine:
             }
 
             logger.info(f"[BOOT SYNC] Restoring price monitor for {symbol}")
-            self.profit_manager.target_profit = manager.config.target_profit
+            manager.profit_manager.target_profit = manager.config.target_profit
             self.start_price_monitor(symbol)
 
     def check_close_condition(self, symbol: str):
@@ -140,9 +134,39 @@ class ExecutionEngine:
             return
 
         # UPDATE FUNDING
-        self.profit_manager.update_funding(symbol)
+        pm = manager.profit_manager
+        if pm.cycle_start_time is not None:
+            now = time.time()
+            if pm.last_funding_check == 0:
+                pm.last_funding_check = now - 31
+            if now - pm.last_funding_check >= 30:
+                try:
+                    incomes = self.exchange.get_funding(symbol, pm.cycle_start_time)
+                except Exception as e:
+                    print(f"[FUNDING ERROR] {symbol}: {e}")
+                    return
+                print("RAW FUNDING INCOME:", incomes)
+                new_last_time = pm.last_funding_time
+                for inc in incomes:
+                    if inc["incomeType"] != "FUNDING_FEE":
+                        continue
+                    if inc["time"] <= pm.last_funding_time:
+                        continue
+                    try:
+                        funding_value = float(inc["income"])
+                    except Exception:
+                        continue
+                    print("----- FUNDING EVENT -----")
+                    print("FUNDING EVENT:", funding_value)
+                    pm.add_funding(funding_value)
+                    print("CYCLE FUNDING TOTAL:", pm.funding_total)
+                    print("-------------------------")
+                    if inc["time"] > new_last_time:
+                        new_last_time = inc["time"]
+                pm.last_funding_time = new_last_time
+                pm.last_funding_check = now
 
-        total_net = self.profit_manager.calculate_total_net(
+        total_net = manager.profit_manager.calculate_total_net(
             symbol,
             long_pos,
             short_pos
@@ -158,12 +182,12 @@ class ExecutionEngine:
             self.last_total_net[symbol] = total_net
 
         # TARGET HIT
-        if total_net >= self.profit_manager.target_profit:
+        if total_net >= manager.profit_manager.target_profit:
 
             print("====== CYCLE CLOSED ======")
             print("FINAL NET:", total_net)
-            print("ENTRY FEES:", self.profit_manager.entry_fees)
-            print("FUNDING:", self.profit_manager.funding_total)
+            print("ENTRY FEES:", manager.profit_manager.entry_fees)
+            print("FUNDING:", manager.profit_manager.funding_total)
             print("==========================")
 
             logger.info(f"TARGET HIT: {total_net} — closing position")
@@ -194,19 +218,19 @@ class ExecutionEngine:
                 logger.error(f"Positions NOT closed after 10 attempts for {symbol_to_check}")
 
             # расчёт реального результата цикла
-            trades = self.exchange.get_user_trades(symbol_to_check, self.profit_manager.cycle_start_time)
+            trades = self.exchange.get_user_trades(symbol_to_check, manager.profit_manager.cycle_start_time)
             realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
             exit_fees = sum(float(t["commission"]) for t in trades)
             cycle_profit = (
                 realized_pnl
-                + self.profit_manager.funding_total
-                - self.profit_manager.entry_fees
+                + manager.profit_manager.funding_total
+                - manager.profit_manager.entry_fees
             )
 
             print("\n========== REAL CYCLE RESULT ==========")
             print(f"REALIZED PNL:   {realized_pnl:.6f}")
-            print(f"FUNDING:        {self.profit_manager.funding_total:.6f}")
-            print(f"ENTRY FEES:     {self.profit_manager.entry_fees:.6f}")
+            print(f"FUNDING:        {manager.profit_manager.funding_total:.6f}")
+            print(f"ENTRY FEES:     {manager.profit_manager.entry_fees:.6f}")
             print(f"EXIT FEES:      {exit_fees:.6f}")
             print("----------------------------------------")
             print(f"CYCLE PROFIT:   {cycle_profit:.6f}")
@@ -240,7 +264,7 @@ class ExecutionEngine:
         if state["cycle_number"] == 1:
             logger.info("Starting new cycle with hedge")
             self.start_price_monitor(symbol)
-            self.profit_manager.start_cycle(symbol, state["cycle_number"])
+            manager.profit_manager.start_cycle(symbol, state["cycle_number"])
 
             if new_short > 0:
                 logger.info(f"Opening SHORT {new_short} USDT")
@@ -258,7 +282,7 @@ class ExecutionEngine:
                     new_short,
                     manager.config.leverage
                 )
-                self.profit_manager.register_entry_order(symbol, order)
+                manager.profit_manager.register_entry_order(symbol, order)
 
             if new_long > 0:
                 logger.info(f"Opening LONG {new_long} USDT")
@@ -276,7 +300,7 @@ class ExecutionEngine:
                     new_long,
                     manager.config.leverage
                 )
-                self.profit_manager.register_entry_order(symbol, order)
+                manager.profit_manager.register_entry_order(symbol, order)
 
         # === УСРЕДНЕНИЕ ===
         else:
@@ -300,7 +324,7 @@ class ExecutionEngine:
                     delta_long,
                     manager.config.leverage
                 )
-                self.profit_manager.register_entry_order(symbol, order)
+                manager.profit_manager.register_entry_order(symbol, order)
 
             if delta_short > 0:
                 logger.info(f"Averaging SHORT +{delta_short} USDT")
@@ -319,7 +343,7 @@ class ExecutionEngine:
                     delta_short,
                     manager.config.leverage
                 )
-                self.profit_manager.register_entry_order(symbol, order)
+                manager.profit_manager.register_entry_order(symbol, order)
 
         # Сохраняем текущие размеры
         self.last_sizes[symbol] = {
@@ -340,30 +364,26 @@ class ExecutionEngine:
             if p["positionSide"] == "SHORT" and float(p["positionAmt"]) != 0:
                 short_pos = p
 
-        total_net = self.profit_manager.calculate_total_net(symbol, long_pos, short_pos)
-
-        manager = self.symbol_registry.get_manager(symbol)
+        total_net = manager.profit_manager.calculate_total_net(symbol, long_pos, short_pos)
 
         print("------ PROFIT DEBUG ------")
-        print("ENTRY FEES:", self.profit_manager.entry_fees)
-        print("CYCLE FUNDING:", self.profit_manager.funding_total)
+        print("ENTRY FEES:", manager.profit_manager.entry_fees)
+        print("CYCLE FUNDING:", manager.profit_manager.funding_total)
         print("TOTAL NET:", total_net)
         print("--------------------------")
 
         # ===== CLOSE CHECK =====
-        if self.profit_manager.should_close(symbol, long_pos, short_pos):
+        if manager.profit_manager.should_close(symbol, long_pos, short_pos):
 
             print("TARGET PROFIT REACHED -> CLOSING POSITIONS")
-
-            manager = self.symbol_registry.get_manager(symbol)
 
             manager.report_cycle_close(
                 symbol,
                 "TARGET_PROFIT",
                 total_net,
-                self.profit_manager.funding_total,
-                self.profit_manager.entry_fees,
-                self.profit_manager.exit_fees
+                manager.profit_manager.funding_total,
+                manager.profit_manager.entry_fees,
+                manager.profit_manager.exit_fees
             )
 
             if long_pos:
@@ -386,19 +406,20 @@ class ExecutionEngine:
 
     def handle_manual_close(self, symbol: str):
         symbol_to_check = symbol
-        trades = self.exchange.get_user_trades(symbol_to_check, self.profit_manager.cycle_start_time)
+        manager = self.symbol_registry.get_manager(symbol)
+        trades = self.exchange.get_user_trades(symbol_to_check, manager.profit_manager.cycle_start_time)
         realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
         exit_fees = sum(float(t["commission"]) for t in trades)
         cycle_profit = (
             realized_pnl
-            + self.profit_manager.funding_total
-            - self.profit_manager.entry_fees
+            + manager.profit_manager.funding_total
+            - manager.profit_manager.entry_fees
         )
 
         print("\n========== REAL CYCLE RESULT ==========")
         print(f"REALIZED PNL:   {realized_pnl:.6f}")
-        print(f"FUNDING:        {self.profit_manager.funding_total:.6f}")
-        print(f"ENTRY FEES:     {self.profit_manager.entry_fees:.6f}")
+        print(f"FUNDING:        {manager.profit_manager.funding_total:.6f}")
+        print(f"ENTRY FEES:     {manager.profit_manager.entry_fees:.6f}")
         print("(EXIT FEES already included in realized PnL)")
         print("----------------------------------------")
         print(f"CYCLE PROFIT:   {cycle_profit:.6f}")

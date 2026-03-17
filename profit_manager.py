@@ -4,8 +4,7 @@ from config import COINS, get_target_profit
 
 class ProfitManager:
 
-    def __init__(self, exchange, taker_fee):
-        self.exchange = exchange
+    def __init__(self, taker_fee):
         self.taker_fee = taker_fee
         self.target_profit = 0
         self.cycle_number = 1
@@ -47,52 +46,11 @@ class ProfitManager:
     # FUNDING
     # ---------------------------
 
-    def update_funding(self, symbol):
-
-        if self.cycle_start_time is None:
-            return
-
-        now = time.time()
-
-        cycle_start_ms = self.cycle_start_time
-
-        if self.last_funding_check is None:
-            self.last_funding_check = now - 31
-
-        # проверяем не чаще чем раз в 30 секунд
-        if now - self.last_funding_check < 30:
-             return
-
-        incomes = self.exchange.get_funding(symbol, cycle_start_ms)
-        print("RAW FUNDING INCOME:", incomes)
-
-        new_last_time = self.last_funding_time
-
-        for inc in incomes:
-
-            if inc["incomeType"] != "FUNDING_FEE":
-                 continue           
-            
-            if inc["time"] <= self.last_funding_time:
-                continue
-
-            funding_value = float(inc["income"])
-
-            print("----- FUNDING EVENT -----")
-            print("FUNDING EVENT:", funding_value)
-
-            self.funding_total += funding_value
-
-            print("CYCLE FUNDING TOTAL:", self.funding_total)
-            print("-------------------------")
-
-            if inc["time"] > new_last_time:
-                new_last_time = inc["time"]
-
-        self.last_funding_time = new_last_time        
-
-
-        self.last_funding_check = now
+    def add_funding(self, funding: float):
+        try:
+            self.funding_total += float(funding)
+        except Exception:
+            pass
 
     # ---------------------------
     # PROFIT CALCULATION

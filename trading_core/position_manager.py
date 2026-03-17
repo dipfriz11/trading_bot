@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from profit_manager import ProfitManager
 
 
 @dataclass
@@ -22,6 +23,9 @@ class PositionManager:
         self.reset_cycle()
         self.processing = False
         self.last_signal_time = 0
+        self.profit_manager = ProfitManager(
+            taker_fee=0.0004
+        )
 
     def reset_cycle(self):
         self.cycle_active = False
