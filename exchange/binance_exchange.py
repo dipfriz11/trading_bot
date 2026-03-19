@@ -25,6 +25,9 @@ class BinanceExchange(BaseExchange):
         ticker = self.client.futures_symbol_ticker(symbol=symbol)
         return float(ticker["price"])
 
+    def get_server_time(self) -> int:
+        return self.client.futures_time()["serverTime"]
+
     # ==============================
     # SYMBOL INFO
     # ==============================

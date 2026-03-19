@@ -735,3 +735,135 @@ XRPUSDT   target_profit = 0.5
 SENTUSDT  target_profit = 1
 
 и циклы будут полностью независимы.
+
+📅 Devlog — 17.03.2026
+
+Версия: v0.7.3
+
+🚀 Основные изменения
+
+Перевод target_profit → per-cycle
+
+Реализовано:
+
+Добавлено поле: PositionManager.cycle_target_profit
+
+Фиксация значения при старте цикла (start_cycle)
+
+Сохранение в state (SQLite)
+
+Восстановление при BOOT SYNC
+
+Сброс при завершении цикла (reset_cycle)
+
+check_close_condition переведён на новый источник
+
+Результат:
+
+target_profit теперь фиксируется на цикл
+
+изменения config не влияют на активный цикл
+
+устранён рассинхрон между config и runtime
+
+корректная работа после рестарта
+
+Исправление бага закрытия позиций (hedge mode)
+
+Проблемы:
+
+Использовался open_market_position вместо close_position
+
+Некорректный positionSide (открывалась противоположная позиция)
+
+Использование reduceOnly вместе с positionSide (ошибка Binance)
+
+Исправления:
+
+execute(): open_market_position → close_position
+
+close_position():
+
+удалён reduceOnly=True
+
+корректная логика:
+
+SELL → positionSide=LONG
+
+BUY → positionSide=SHORT
+
+Результат:
+
+позиции корректно закрываются
+
+устранены ошибки Binance API
+
+исключено открытие встречных позиций при закрытии
+
+Удаление дублирующего источника target_profit (частично)
+
+Убрана установка:
+manager.profit_manager.target_profit = config.target_profit
+
+Основная логика закрытия переведена на:
+manager.cycle_target_profit
+
+Примечание:
+
+ProfitManager.target_profit временно оставлен (Этап B)
+
+🧪 Проведённые тесты
+
+Закрытие по target_profit
+✔️ обе позиции (LONG + SHORT) закрываются
+✔️ ошибки Binance отсутствуют
+
+Финансовый расчёт
+✔️ PnL, комиссии и итоговая прибыль считаются корректно
+
+Reset цикла
+✔️ cycle_target_profit сбрасывается
+✔️ новый цикл стартует корректно
+
+Новый цикл после закрытия
+✔️ применяет актуальный config.target_profit
+
+Рестарт (частично)
+✔️ позиции отсутствуют
+✔️ новый цикл запускается корректно
+
+⚠️ Известные моменты
+
+ProfitManager.target_profit ещё не удалён (будет в Этапе B)
+
+Возможен edge-case с quantity = 0 при закрытии (пока не критично)
+
+📌 Следующие шаги
+
+Этап B:
+
+Удалить ProfitManager.target_profit
+
+Передавать target_profit извне (из PositionManager)
+
+Убрать дублирующую логику закрытия (pm.should_close)
+
+Оставить единый источник истины
+
+После:
+
+Финальный тест
+
+Проверка manual close
+
+Проверка restart recovery (multipliers)
+
+🧠 Итог
+
+Устранён критический баг закрытия позиций
+
+Архитектура target_profit приведена к per-cycle модели
+
+Повышена стабильность и предсказуемость системы
+
+Версия v0.7.3 — стабильная контрольная точка

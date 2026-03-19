@@ -17,7 +17,12 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.003,
+            2: 0.003,
+            3: 0.003,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,
@@ -30,7 +35,12 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.003,
+            2: 0.003,
+            3: 0.003,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,
@@ -43,7 +53,12 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.003,
+            2: 0.003,
+            3: 0.003,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,
@@ -51,16 +66,21 @@ COINS = {
     },
 
     "SENTUSDT": {
-        "base_size": 12,
+        "base_size": 18,
         "hedge_ratio": 0.5,
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.001,
+            2: 0.005,
+            3: 0.007,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
-        "max_cycles": 5,
+        "max_cycles": 3,
         "max_total_exposure": None,
-        "leverage": 10
+        "leverage": 20
     },
 
     "ANIMEUSDT": {
@@ -69,11 +89,16 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.001,
+        "target_profit": {
+            1: 0.001,
+            2: 0.005,
+            3: 0.007,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
-        "max_cycles": 5,
+        "max_cycles": 4,
         "max_total_exposure": None,
-        "leverage": 10
+        "leverage": 20
     },
 
     "BANANAS31USDT": {
@@ -82,7 +107,12 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.003,
+            2: 0.003,
+            3: 0.003,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,
@@ -95,7 +125,12 @@ COINS = {
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
-        "target_profit": 0.5,
+        "target_profit": {
+            1: 0.003,
+            2: 0.003,
+            3: 0.003,
+            4: 0.004
+        },
         "repeat_mode": "ignore",
         "max_cycles": 5,
         "max_total_exposure": None,

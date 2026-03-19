@@ -1,12 +1,11 @@
 import time
-from config import COINS, get_target_profit
+from config import COINS
 
 
 class ProfitManager:
 
     def __init__(self, taker_fee):
         self.taker_fee = taker_fee
-        self.target_profit = 0
         self.cycle_number = 1
 
         self.cycle_start_time = None
@@ -20,14 +19,16 @@ class ProfitManager:
     # Cycle control
     # ---------------------------
 
-    def start_cycle(self, symbol, cycle_number):
+    def start_cycle(self, symbol, cycle_number, start_time=None):
 
         self.cycle_number = cycle_number
-        self.target_profit = get_target_profit(symbol, self.cycle_number)
 
-        print(f"CYCLE: {self.cycle_number} | TARGET PROFIT: {self.target_profit}")
+        if start_time is not None:
+            self.cycle_start_time = start_time
+        else:
+            self.cycle_start_time = int(time.time() * 1000)
 
-        self.cycle_start_time = int(time.time() * 1000)
+        print(f"CYCLE: {self.cycle_number}")
         self.entry_fees = 0.0
         self.exit_fees = 0.0
         self.funding_total = 0.0
@@ -56,7 +57,7 @@ class ProfitManager:
     # PROFIT CALCULATION
     # ---------------------------
 
-    def calculate_total_net(self, symbol, long_pos, short_pos):
+    def calculate_total_net(self, symbol, long_pos, short_pos, target_profit=None):
 
 
         total_unreal = 0
@@ -95,8 +96,6 @@ class ProfitManager:
             - total_exit_fee
         )
         
-        distance = self.target_profit - total_net
-
         print("\n============= POSITION DEBUG =============")
 
         print(f"LONG  PNL:      {long_unreal:.6f}")
@@ -116,8 +115,10 @@ class ProfitManager:
         print(f"REAL NET:       {total_net:.6f}")
 
         print("")
-        print(f"TARGET PROFIT:  {self.target_profit:.6f}")
-        print(f"DISTANCE:       {distance:.6f}")
+        if target_profit is not None:
+            distance = target_profit - total_net
+            print(f"TARGET PROFIT:  {target_profit:.6f}")
+            print(f"DISTANCE:       {distance:.6f}")
 
         print("==========================================\n")
 
@@ -127,15 +128,15 @@ class ProfitManager:
     # TARGET CHECK
     # ---------------------------
 
-    def should_close(self, symbol, long_pos, short_pos):
+    def should_close(self, symbol, long_pos, short_pos, target_profit):
 
-        total_net = self.calculate_total_net(symbol, long_pos, short_pos)
+        total_net = self.calculate_total_net(symbol, long_pos, short_pos, target_profit)
 
         print(
-            f"TARGET CHECK → NET: {total_net:.6f} / TARGET: {self.target_profit:.6f}"
+            f"TARGET CHECK → NET: {total_net:.6f} / TARGET: {target_profit:.6f}"
         )
 
-        if total_net >= self.target_profit:
+        if total_net >= target_profit:
             return True
 
         return False

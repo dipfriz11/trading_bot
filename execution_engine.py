@@ -4,6 +4,7 @@ import websocket
 import json
 
 from logger_config import setup_logger
+from config import get_target_profit
 
 logger = setup_logger()
 
@@ -108,6 +109,11 @@ class ExecutionEngine:
     def check_close_condition(self, symbol: str):
 
         if not self.mark_price.get(symbol):
+            return
+
+        manager = self.symbol_registry.get_manager(symbol)
+
+        if manager.cycle_target_profit == 0:
             return
 
         positions = self.exchange.get_positions(symbol)
@@ -219,18 +225,21 @@ class ExecutionEngine:
             # расчёт реального результата цикла
             trades = self.exchange.get_user_trades(symbol_to_check, manager.profit_manager.cycle_start_time)
             realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
-            exit_fees = sum(float(t["commission"]) for t in trades)
+            total_commission = sum(float(t["commission"]) for t in trades)
+            exit_fees = total_commission - manager.profit_manager.entry_fees
             cycle_profit = (
                 realized_pnl
                 + manager.profit_manager.funding_total
                 - manager.profit_manager.entry_fees
+                - exit_fees
             )
 
             print("\n========== REAL CYCLE RESULT ==========")
             print(f"REALIZED PNL:   {realized_pnl:.6f}")
             print(f"FUNDING:        {manager.profit_manager.funding_total:.6f}")
-            print(f"ENTRY FEES:     {manager.profit_manager.entry_fees:.6f}")
-            print(f"EXIT FEES:      {exit_fees:.6f}")
+            print(f"TOTAL COMMISSION: {total_commission:.6f}")
+            print(f"ENTRY FEES:       {manager.profit_manager.entry_fees:.6f}")
+            print(f"EXIT FEES:        {exit_fees:.6f}")
             print("----------------------------------------")
             print(f"CYCLE PROFIT:   {cycle_profit:.6f}")
             print("========================================\n")
@@ -260,10 +269,14 @@ class ExecutionEngine:
         new_short = state["short_size"]
 
         # === СТАРТ ЦИКЛА ===
+        manager.cycle_target_profit = get_target_profit(symbol, state["cycle_number"])
+
         if state["cycle_number"] == 1:
             logger.info("Starting new cycle with hedge")
+            server_time = self.exchange.get_server_time()
+            start_time = server_time - 2000
+            manager.profit_manager.start_cycle(symbol, state["cycle_number"], start_time=start_time)
             self.start_price_monitor(symbol)
-            manager.profit_manager.start_cycle(symbol, state["cycle_number"])
 
             if new_short > 0:
                 logger.info(f"Opening SHORT {new_short} USDT")
@@ -372,7 +385,12 @@ class ExecutionEngine:
         print("--------------------------")
 
         # ===== CLOSE CHECK =====
-        if manager.profit_manager.should_close(symbol, long_pos, short_pos):
+        if manager.profit_manager.should_close(
+            symbol,
+            long_pos,
+            short_pos,
+            manager.cycle_target_profit
+        ):
 
             print("TARGET PROFIT REACHED -> CLOSING POSITIONS")
 
@@ -406,18 +424,21 @@ class ExecutionEngine:
         manager = self.symbol_registry.get_manager(symbol)
         trades = self.exchange.get_user_trades(symbol_to_check, manager.profit_manager.cycle_start_time)
         realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
-        exit_fees = sum(float(t["commission"]) for t in trades)
+        total_commission = sum(float(t["commission"]) for t in trades)
+        exit_fees = total_commission - manager.profit_manager.entry_fees
         cycle_profit = (
             realized_pnl
             + manager.profit_manager.funding_total
             - manager.profit_manager.entry_fees
+            - exit_fees
         )
 
         print("\n========== REAL CYCLE RESULT ==========")
         print(f"REALIZED PNL:   {realized_pnl:.6f}")
         print(f"FUNDING:        {manager.profit_manager.funding_total:.6f}")
-        print(f"ENTRY FEES:     {manager.profit_manager.entry_fees:.6f}")
-        print("(EXIT FEES already included in realized PnL)")
+        print(f"TOTAL COMMISSION: {total_commission:.6f}")
+        print(f"ENTRY FEES:       {manager.profit_manager.entry_fees:.6f}")
+        print(f"EXIT FEES:        {exit_fees:.6f}")
         print("----------------------------------------")
         print(f"CYCLE PROFIT:   {cycle_profit:.6f}")
         print("========================================\n")

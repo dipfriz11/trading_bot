@@ -23,9 +23,14 @@ class SQLiteStorage:
                         cycle_number    INTEGER,
                         blocked         INTEGER,
                         last_signal     TEXT,
-                        last_signal_time REAL
+                        last_signal_time REAL,
+                        cycle_target_profit REAL
                     )
                 """)
+                try:
+                    conn.execute("ALTER TABLE symbol_state ADD COLUMN cycle_target_profit REAL")
+                except:
+                    pass
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS symbols (
                         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,14 +59,15 @@ class SQLiteStorage:
         result = {}
         for row in rows:
             result[row["symbol"]] = {
-                "cycle_active":     bool(row["cycle_active"]),
-                "bias":             row["bias"],
-                "long_size":        row["long_size"],
-                "short_size":       row["short_size"],
-                "cycle_number":     row["cycle_number"],
-                "blocked":          bool(row["blocked"]),
-                "last_signal":      row["last_signal"],
-                "last_signal_time": row["last_signal_time"],
+                "cycle_active":        bool(row["cycle_active"]),
+                "bias":                row["bias"],
+                "long_size":           row["long_size"],
+                "short_size":          row["short_size"],
+                "cycle_number":        row["cycle_number"],
+                "blocked":             bool(row["blocked"]),
+                "last_signal":         row["last_signal"],
+                "last_signal_time":    row["last_signal_time"],
+                "cycle_target_profit": row["cycle_target_profit"],
             }
         return result
 
@@ -72,17 +78,19 @@ class SQLiteStorage:
                 conn.execute("""
                     INSERT INTO symbol_state (
                         symbol, cycle_active, bias, long_size, short_size,
-                        cycle_number, blocked, last_signal, last_signal_time
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        cycle_number, blocked, last_signal, last_signal_time,
+                        cycle_target_profit
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(symbol) DO UPDATE SET
-                        cycle_active     = excluded.cycle_active,
-                        bias             = excluded.bias,
-                        long_size        = excluded.long_size,
-                        short_size       = excluded.short_size,
-                        cycle_number     = excluded.cycle_number,
-                        blocked          = excluded.blocked,
-                        last_signal      = excluded.last_signal,
-                        last_signal_time = excluded.last_signal_time
+                        cycle_active        = excluded.cycle_active,
+                        bias                = excluded.bias,
+                        long_size           = excluded.long_size,
+                        short_size          = excluded.short_size,
+                        cycle_number        = excluded.cycle_number,
+                        blocked             = excluded.blocked,
+                        last_signal         = excluded.last_signal,
+                        last_signal_time    = excluded.last_signal_time,
+                        cycle_target_profit = excluded.cycle_target_profit
                 """, (
                     symbol,
                     int(state["cycle_active"]),
@@ -93,6 +101,7 @@ class SQLiteStorage:
                     int(state["blocked"]),
                     state["last_signal"],
                     state["last_signal_time"],
+                    state.get("cycle_target_profit"),
                 ))
                 conn.commit()
             finally:

@@ -2,6 +2,7 @@ import threading
 
 from trading_core.position_manager import PositionManager, CycleConfig
 from storage.sqlite_storage import SQLiteStorage
+from config import get_target_profit
 
 
 class SymbolRegistry:
@@ -67,7 +68,7 @@ class SymbolRegistry:
                       manager.blocked = state["blocked"]
                       manager.last_signal = state.get("last_signal")
                       if state.get("cycle_active"):
-                          manager.cycle_target_profit = state.get("cycle_target_profit", manager.config.target_profit)
+                          manager.cycle_target_profit = get_target_profit(symbol, manager.cycle_number)
                       else:
                           manager.cycle_target_profit = 0.0
 

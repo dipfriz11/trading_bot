@@ -141,10 +141,12 @@ def webhook(hook_token):
 
         registry._save_state()
 
-        state = manager.get_state()
-
         logger.info(f"Executing order for {symbol} | side={side} | state={state}")
         engine.execute(symbol, side, state)
+
+        state = manager.get_state()
+
+        registry._save_state()
 
                     # ---- DEBUG: NET PNL ----
         net_pnl = engine.exchange.get_net_pnl(symbol)

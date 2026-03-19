@@ -74,7 +74,6 @@ class PositionManager:
 
         self.cycle_number = 1
         self.last_signal = side
-        self.cycle_target_profit = self.config.target_profit
 
     # === ПРИМЕНЕНИЕ СИГНАЛА ===
 
@@ -128,7 +127,7 @@ class PositionManager:
         if not self.config.auto_close:
             return None
 
-        if total_unrealized_pnl >= self.config.target_profit:
+        if total_unrealized_pnl >= self.cycle_target_profit:
             self.reset_cycle()
             return "TARGET_PROFIT"
 
