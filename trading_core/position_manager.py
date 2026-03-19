@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from profit_manager import ProfitManager
+from config import get_target_profit
 
 
 @dataclass
@@ -133,6 +134,13 @@ class PositionManager:
 
         return None
 
+
+    # === ОБНОВЛЕНИЕ TARGET PROFIT ===
+
+    def refresh_cycle_target_profit(self, symbol: str):
+        if not self.cycle_active:
+            return
+        self.cycle_target_profit = get_target_profit(symbol, self.cycle_number)
 
     # === СОСТОЯНИЕ ===
 

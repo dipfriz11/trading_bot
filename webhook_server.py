@@ -204,6 +204,48 @@ def reset_symbol(symbol):
     }), 200
 
 
+@app.route("/api/set_target_profit", methods=["POST"])
+def set_target_profit():
+
+    registry = app.config.get("registry")
+    engine = app.config.get("engine")
+
+    if registry is None or engine is None:
+        return jsonify({"error": "server not initialized"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Empty body"}), 400
+
+    symbol = data.get("symbol", "").replace(".P", "").upper()
+    cycle_number = data.get("cycle_number")
+    value = data.get("value")
+
+    if not symbol or cycle_number is None or value is None:
+        return jsonify({"error": "Missing fields: symbol, cycle_number, value"}), 400
+
+    coin = COINS.get(symbol)
+    if not coin:
+        return jsonify({"error": f"Symbol {symbol} not in config"}), 404
+
+    if "target_profit" not in coin or not isinstance(coin["target_profit"], dict):
+        coin["target_profit"] = {}
+
+    coin["target_profit"][int(cycle_number)] = float(value)
+
+    manager = registry.get_manager(symbol)
+    manager.refresh_cycle_target_profit(symbol)
+    engine.check_close_condition(symbol)
+
+    return jsonify({
+        "status": "target_profit_updated",
+        "symbol": symbol,
+        "cycle_number": cycle_number,
+        "value": value,
+        "cycle_target_profit": manager.cycle_target_profit
+    }), 200
+
+
 def build_cycle_config(symbol: str) -> CycleConfig:
     coin = COINS.get(symbol)
     if not coin:
