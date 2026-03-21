@@ -2,7 +2,7 @@ from binance.client import Client
 from config import API_KEY, API_SECRET
 from .base_exchange import BaseExchange
 import math
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 
 
 class BinanceExchange(BaseExchange):
@@ -247,6 +247,92 @@ class BinanceExchange(BaseExchange):
     
     def open_limit_position(self, symbol: str, side: str, usdt_amount: float, price: float):
         raise NotImplementedError("Limit orders not implemented yet")
+
+    # ==============================
+    # LIMIT ORDER MANAGEMENT
+    # ==============================
+
+    def _round_price(self, symbol_info: dict, price: float, side: str) -> float:
+        tick_size = next(
+            float(f["tickSize"])
+            for f in symbol_info["filters"]
+            if f["filterType"] == "PRICE_FILTER"
+        )
+        tick = Decimal(str(tick_size))
+        price_dec = Decimal(str(price))
+
+        if side.upper() == "BUY":
+            return float((price_dec // tick) * tick)
+        else:
+            return float((price_dec / tick).to_integral_value(rounding=ROUND_CEILING) * tick)
+
+    def _round_quantity(self, symbol_info: dict, quantity: float) -> float:
+        step_size = next(
+            float(f["stepSize"])
+            for f in symbol_info["filters"]
+            if f["filterType"] == "LOT_SIZE"
+        )
+        step = Decimal(str(step_size))
+        return float((Decimal(str(quantity)) // step) * step)
+
+    def place_limit_order(self, symbol: str, side: str, quantity: float, price: float, position_side: str = None):
+        symbol_info = self.get_symbol_info(symbol)
+        price    = self._round_price(symbol_info, price, side)
+        quantity = self._round_quantity(symbol_info, quantity)
+
+        params = {
+            "symbol": symbol,
+            "side": side.upper(),
+            "type": "LIMIT",
+            "quantity": quantity,
+            "price": price,
+            "timeInForce": "GTC"
+        }
+
+        if not position_side:
+            if side.upper() == "BUY":
+                position_side = "LONG"
+            else:
+                position_side = "SHORT"
+
+        params["positionSide"] = position_side
+
+        return self.client.futures_create_order(**params)
+
+    def modify_order(self, symbol: str, order_id: int, side: str, quantity: float, price: float, position_side: str = None):
+        symbol_info = self.get_symbol_info(symbol)
+        price    = self._round_price(symbol_info, price, side)
+        quantity = self._round_quantity(symbol_info, quantity)
+
+        params = {
+            "symbol": symbol,
+            "orderId": order_id,
+            "side": side.upper(),
+            "quantity": quantity,
+            "price": price
+        }
+
+        if not position_side:
+            if side.upper() == "BUY":
+                position_side = "LONG"
+            else:
+                position_side = "SHORT"
+
+        params["positionSide"] = position_side
+
+        return self.client.futures_modify_order(**params)
+
+    def cancel_order(self, symbol: str, order_id: int):
+        return self.client.futures_cancel_order(
+            symbol=symbol,
+            orderId=order_id
+        )
+
+    def get_order(self, symbol: str, order_id: int):
+        return self.client.futures_get_order(
+            symbol=symbol,
+            orderId=order_id
+        )
     
     def calculate_fee(self, order_type: str, notional: float) -> float:
         """
