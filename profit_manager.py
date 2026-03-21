@@ -1,5 +1,8 @@
 import time
+import logging
 from config import COINS
+
+logger = logging.getLogger(__name__)
 
 
 class ProfitManager:
@@ -20,9 +23,18 @@ class ProfitManager:
         if self.storage:
             state = self.storage.get_profit_state(self.symbol)
             if state:
-                self.cycle_number  = state.get("cycle_number", 1)
-                self.entry_fees    = state.get("entry_fees", 0.0)
-                self.funding_total = state.get("funding_total", 0.0)
+                self.cycle_number    = state.get("cycle_number", 1)
+                self.entry_fees      = state.get("entry_fees", 0.0)
+                self.funding_total   = state.get("funding_total", 0.0)
+                self.cycle_start_time = state.get("cycle_start_time")
+
+        if not self.cycle_start_time:
+            logger.warning(f"[{self.symbol}] cycle_start_time missing")
+
+            if self.cycle_number > 0:
+                logger.error(f"[{self.symbol}] Active cycle without cycle_start_time — trade history will be broken")
+            else:
+                self.cycle_start_time = int(time.time() * 1000)
 
     # ---------------------------
     # Cycle control
@@ -50,7 +62,8 @@ class ProfitManager:
                 symbol=self.symbol,
                 cycle_number=self.cycle_number,
                 entry_fees=self.entry_fees,
-                funding_total=self.funding_total
+                funding_total=self.funding_total,
+                cycle_start_time=self.cycle_start_time
             )
 
     def register_entry_order(self, symbol, order):
@@ -65,7 +78,8 @@ class ProfitManager:
                     symbol=self.symbol,
                     cycle_number=self.cycle_number,
                     entry_fees=self.entry_fees,
-                    funding_total=self.funding_total
+                    funding_total=self.funding_total,
+                    cycle_start_time=self.cycle_start_time
                 )
 
     # ---------------------------

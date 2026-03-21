@@ -422,7 +422,14 @@ class ExecutionEngine:
     def handle_manual_close(self, symbol: str):
         symbol_to_check = symbol
         manager = self.symbol_registry.get_manager(symbol)
-        trades = self.exchange.get_user_trades(symbol_to_check, manager.profit_manager.cycle_start_time)
+
+        start_time = manager.profit_manager.cycle_start_time
+
+        if not start_time:
+            logger.error(f"[{symbol}] cycle_start_time is None — skipping trade-based calculation")
+            return
+
+        trades = self.exchange.get_user_trades(symbol_to_check, start_time)
         realized_pnl = sum(float(t["realizedPnl"]) for t in trades)
         total_commission = sum(float(t["commission"]) for t in trades)
         exit_fees = total_commission - manager.profit_manager.entry_fees

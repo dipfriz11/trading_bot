@@ -33,13 +33,18 @@ class SQLiteStorage:
                     pass
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS profit_state (
-                        symbol         TEXT PRIMARY KEY,
-                        cycle_number   INTEGER,
-                        entry_fees     REAL,
-                        funding_total  REAL,
-                        updated_at     INTEGER
+                        symbol           TEXT PRIMARY KEY,
+                        cycle_number     INTEGER,
+                        entry_fees       REAL,
+                        funding_total    REAL,
+                        cycle_start_time INTEGER,
+                        updated_at       INTEGER
                     )
                 """)
+                try:
+                    conn.execute("ALTER TABLE profit_state ADD COLUMN cycle_start_time INTEGER")
+                except:
+                    pass
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS target_profit_overrides (
                         symbol       TEXT,
@@ -124,20 +129,21 @@ class SQLiteStorage:
             finally:
                 conn.close()
 
-    def save_profit_state(self, symbol: str, cycle_number: int, entry_fees: float, funding_total: float):
+    def save_profit_state(self, symbol: str, cycle_number: int, entry_fees: float, funding_total: float, cycle_start_time: int = None):
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             try:
                 conn.execute("""
                     INSERT INTO profit_state (
-                        symbol, cycle_number, entry_fees, funding_total, updated_at
-                    ) VALUES (?, ?, ?, ?, strftime('%s','now'))
+                        symbol, cycle_number, entry_fees, funding_total, cycle_start_time, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, strftime('%s','now'))
                     ON CONFLICT(symbol) DO UPDATE SET
-                        cycle_number  = excluded.cycle_number,
-                        entry_fees    = excluded.entry_fees,
-                        funding_total = excluded.funding_total,
-                        updated_at    = excluded.updated_at
-                """, (symbol, cycle_number, entry_fees, funding_total))
+                        cycle_number     = excluded.cycle_number,
+                        entry_fees       = excluded.entry_fees,
+                        funding_total    = excluded.funding_total,
+                        cycle_start_time = excluded.cycle_start_time,
+                        updated_at       = excluded.updated_at
+                """, (symbol, cycle_number, entry_fees, funding_total, cycle_start_time))
                 conn.commit()
             finally:
                 conn.close()
@@ -156,10 +162,11 @@ class SQLiteStorage:
         if row is None:
             return None
         return {
-            "cycle_number":  row["cycle_number"],
-            "entry_fees":    row["entry_fees"],
-            "funding_total": row["funding_total"],
-            "updated_at":    row["updated_at"],
+            "cycle_number":    row["cycle_number"],
+            "entry_fees":      row["entry_fees"],
+            "funding_total":   row["funding_total"],
+            "cycle_start_time": row["cycle_start_time"],
+            "updated_at":      row["updated_at"],
         }
 
     def save_target_profit(self, symbol: str, cycle_number: int, value: float):
