@@ -66,16 +66,16 @@ COINS = {
     },
 
     "SENTUSDT": {
-        "base_size": 18,
+        "base_size": 12,
         "hedge_ratio": 0.5,
         "major_multiplier": 2.0,
         "minor_multiplier": 0.5,
         "auto_close": True,
         "target_profit": {
-            1: 0.001,
-            2: 0.005,
-            3: 0.007,
-            4: 0.004
+            1: 0.5,
+            2: 0.3,
+            3: 0.8,
+            4: 0.9
         },
         "repeat_mode": "ignore",
         "max_cycles": 3,

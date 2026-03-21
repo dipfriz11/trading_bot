@@ -2,7 +2,7 @@ import threading
 
 from trading_core.position_manager import PositionManager, CycleConfig
 from storage.sqlite_storage import SQLiteStorage
-from config import get_target_profit
+from config import get_target_profit, COINS
 
 
 class SymbolRegistry:
@@ -32,7 +32,7 @@ class SymbolRegistry:
                     max_total_exposure=self.base_config.max_total_exposure,
                 )
 
-                self.registry[symbol] = PositionManager(config_copy)
+                self.registry[symbol] = PositionManager(config_copy, symbol=symbol, storage=self.storage)
 
             return self.registry[symbol]
 
@@ -55,6 +55,15 @@ class SymbolRegistry:
         with self._lock:
 
              try:
+                  for sym in COINS.keys():
+                      overrides = self.storage.load_target_profits(sym)
+                      if overrides:
+                          coin = COINS.get(sym)
+                          if coin:
+                              if not isinstance(coin.get("target_profit"), dict):
+                                  coin["target_profit"] = {}
+                              coin["target_profit"].update(overrides)
+
                   data = self.storage.load_all_states()
 
                   for symbol, state in data.items():

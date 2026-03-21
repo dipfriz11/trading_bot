@@ -46,7 +46,7 @@ class ExecutionEngine:
                     return
 
                 print()
-                print("===== CYCLE INFO =====")
+                print(f"[{symbol}] ===== CYCLE INFO =====")
                 print(f"CYCLE: {manager.cycle_number}")
                 print(f"TARGET PROFIT: {manager.cycle_target_profit}")
                 print("======================")
@@ -180,7 +180,7 @@ class ExecutionEngine:
         # печатаем только если total_net изменился
         if self.last_total_net.get(symbol) is None or abs(total_net - self.last_total_net.get(symbol)) > 0.000001:
 
-            print("----- PROFIT DEBUG -----")
+            print(f"[{symbol}] ----- PROFIT DEBUG -----")
             print("TOTAL NET:", total_net)
             print("------------------------")
 
@@ -378,7 +378,7 @@ class ExecutionEngine:
 
         total_net = manager.profit_manager.calculate_total_net(symbol, long_pos, short_pos)
 
-        print("------ PROFIT DEBUG ------")
+        print(f"[{symbol}] ------ PROFIT DEBUG ------")
         print("ENTRY FEES:", manager.profit_manager.entry_fees)
         print("CYCLE FUNDING:", manager.profit_manager.funding_total)
         print("TOTAL NET:", total_net)

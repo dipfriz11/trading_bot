@@ -4,8 +4,10 @@ from config import COINS
 
 class ProfitManager:
 
-    def __init__(self, taker_fee):
+    def __init__(self, symbol: str, taker_fee, storage=None):
+        self.symbol = symbol
         self.taker_fee = taker_fee
+        self.storage = storage
         self.cycle_number = 1
 
         self.cycle_start_time = None
@@ -14,6 +16,13 @@ class ProfitManager:
         self.funding_total = 0.0
         self.last_funding_check = 0
         self.last_funding_time = 0
+
+        if self.storage:
+            state = self.storage.get_profit_state(self.symbol)
+            if state:
+                self.cycle_number  = state.get("cycle_number", 1)
+                self.entry_fees    = state.get("entry_fees", 0.0)
+                self.funding_total = state.get("funding_total", 0.0)
 
     # ---------------------------
     # Cycle control
@@ -28,20 +37,36 @@ class ProfitManager:
         else:
             self.cycle_start_time = int(time.time() * 1000)
 
-        print(f"CYCLE: {self.cycle_number}")
+        print(f"[{self.symbol}] CYCLE: {self.cycle_number}")
         self.entry_fees = 0.0
         self.exit_fees = 0.0
         self.funding_total = 0.0
         self.last_funding_time = 0
 
-        print("Cycle started at:", self.cycle_start_time)
-    
+        print(f"[{self.symbol}] Cycle started at:", self.cycle_start_time)
+
+        if self.storage:
+            self.storage.save_profit_state(
+                symbol=self.symbol,
+                cycle_number=self.cycle_number,
+                entry_fees=self.entry_fees,
+                funding_total=self.funding_total
+            )
+
     def register_entry_order(self, symbol, order):
         entry_fee = order.get("calculated_entry_fee", 0.0)
 
         if entry_fee:
-            print(f"REGISTER ENTRY FEE: {entry_fee}")
+            print(f"[{self.symbol}] REGISTER ENTRY FEE: {entry_fee}")
             self.entry_fees += float(entry_fee)
+
+            if self.storage:
+                self.storage.save_profit_state(
+                    symbol=self.symbol,
+                    cycle_number=self.cycle_number,
+                    entry_fees=self.entry_fees,
+                    funding_total=self.funding_total
+                )
 
     # ---------------------------
     # FUNDING
@@ -98,27 +123,27 @@ class ProfitManager:
         
         print("\n============= POSITION DEBUG =============")
 
-        print(f"LONG  PNL:      {long_unreal:.6f}")
-        print(f"SHORT PNL:      {short_unreal:.6f}")
+        print(f"[{self.symbol}] LONG  PNL:      {long_unreal:.6f}")
+        print(f"[{self.symbol}] SHORT PNL:      {short_unreal:.6f}")
 
         print("------------------------------------------")
 
-        print(f"UNREAL TOTAL:   {total_unreal:.6f}")
+        print(f"[{self.symbol}] UNREAL TOTAL:   {total_unreal:.6f}")
 
         print("")
-        print(f"CYCLE FUNDING:  {self.funding_total:.6f}")
-        print(f"ENTRY FEES:     {self.entry_fees:.6f}")
-        print(f"EXIT FEES:      {total_exit_fee:.6f}")
+        print(f"[{self.symbol}] CYCLE FUNDING:  {self.funding_total:.6f}")
+        print(f"[{self.symbol}] ENTRY FEES:     {self.entry_fees:.6f}")
+        print(f"[{self.symbol}] EXIT FEES:      {total_exit_fee:.6f}")
 
         print("------------------------------------------")
 
-        print(f"REAL NET:       {total_net:.6f}")
+        print(f"[{self.symbol}] REAL NET:       {total_net:.6f}")
 
         print("")
         if target_profit is not None:
             distance = target_profit - total_net
-            print(f"TARGET PROFIT:  {target_profit:.6f}")
-            print(f"DISTANCE:       {distance:.6f}")
+            print(f"[{self.symbol}] TARGET PROFIT:  {target_profit:.6f}")
+            print(f"[{self.symbol}] DISTANCE:       {distance:.6f}")
 
         print("==========================================\n")
 
@@ -133,7 +158,7 @@ class ProfitManager:
         total_net = self.calculate_total_net(symbol, long_pos, short_pos, target_profit)
 
         print(
-            f"TARGET CHECK → NET: {total_net:.6f} / TARGET: {target_profit:.6f}"
+            f"[{self.symbol}] TARGET CHECK → NET: {total_net:.6f} / TARGET: {target_profit:.6f}"
         )
 
         if total_net >= target_profit:

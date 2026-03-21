@@ -19,13 +19,17 @@ class CycleConfig:
 
 class PositionManager:
 
-    def __init__(self, config: CycleConfig):
+    def __init__(self, config: CycleConfig, symbol: str = "", storage=None):
         self.config = config
+        self.symbol = symbol
+        self.storage = storage
         self.reset_cycle()
         self.processing = False
         self.last_signal_time = 0
         self.profit_manager = ProfitManager(
-            taker_fee=0.0004
+            symbol=self.symbol,
+            taker_fee=0.0004,
+            storage=self.storage
         )
         self.cycle_target_profit = 0.0
 

@@ -233,6 +233,8 @@ def set_target_profit():
 
     coin["target_profit"][int(cycle_number)] = float(value)
 
+    registry.storage.save_target_profit(symbol, int(cycle_number), float(value))
+
     manager = registry.get_manager(symbol)
     manager.refresh_cycle_target_profit(symbol)
     engine.check_close_condition(symbol)
