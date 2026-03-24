@@ -1,6 +1,9 @@
 import threading
 import time
 
+from order.order_request import OrderRequest
+from order.executors import MarketExecutor, LimitExecutor
+
 
 class OrderManager:
 
@@ -14,10 +17,21 @@ class OrderManager:
         self.side = None
         self.quantity = None
 
+        # структура для нескольких ордеров (LONG / SHORT)
+        self.orders = {}
+
         self.trailing_enabled = config.get("trailing_entry", False)
 
         self._trailing_thread = None
         self._trailing_active = False
+
+        # multi-trailing: поток и флаг на каждый position_side
+        self.trailing_threads = {}
+        self.trailing_active  = {}
+
+        # executors — тонкий слой под order_type
+        self._market_executor = MarketExecutor(exchange)
+        self._limit_executor = LimitExecutor(exchange)
 
     def place_order(self, side, price, quantity, position_side=None):
         # останавливаем предыдущий trailing (если был)
@@ -42,90 +56,205 @@ class OrderManager:
         if not self.trailing_enabled:
             return
 
-        if not self.order_id:
+        # выбираем источник данных: multi-order или старый single-order
+        if position_side and position_side in self.orders:
+            entry = self.orders[position_side]
+            order_id      = entry["order_id"]
+            current_price = entry["price"]
+            side          = entry["side"]
+            quantity      = entry["quantity"]
+        else:
+            order_id      = self.order_id
+            current_price = self.current_price
+            side          = self.side
+            quantity      = self.quantity
+
+        if not order_id:
             return
 
         # не обновляем если цена не изменилась
-        if abs(new_price - self.current_price) < 1e-8:
+        if abs(new_price - current_price) < 1e-8:
             return
 
         # двигаем только в выгодную сторону
-        if self.side == "BUY" and new_price <= self.current_price:
+        if side == "BUY" and new_price <= current_price:
             return
-        if self.side == "SELL" and new_price >= self.current_price:
+        if side == "SELL" and new_price >= current_price:
             return
 
-        order = self.exchange.get_order(self.symbol, self.order_id)
+        order = self.exchange.get_order(self.symbol, order_id)
         status = order["status"]
 
         if status != "NEW":
             return
 
         try:
-            self.exchange.modify_order(
+            request = OrderRequest(
                 symbol=self.symbol,
-                order_id=self.order_id,
-                side=self.side,
-                quantity=self.quantity,
+                side=side,
+                order_type="limit",
+                quantity=quantity,
                 price=new_price,
-                position_side=position_side
+                params={"position_side": position_side} if position_side else {}
             )
-            self.current_price = new_price
+            self._limit_executor.modify(order_id, request)
+
+            # обновляем цену в нужном месте
+            if position_side and position_side in self.orders:
+                self.orders[position_side]["price"] = new_price
+            else:
+                self.current_price = new_price
 
         except Exception as e:
             print(f"Modify failed: {e}, fallback to cancel+new")
 
             # fallback
             try:
-                self.exchange.cancel_order(self.symbol, self.order_id)
+                self.exchange.cancel_order(self.symbol, order_id)
                 order = self.exchange.place_limit_order(
                     symbol=self.symbol,
-                    side=self.side,
-                    quantity=self.quantity,
+                    side=side,
+                    quantity=quantity,
                     price=new_price,
                     position_side=position_side
                 )
 
-                self.order_id = order["orderId"]
-                self.current_price = new_price
+                new_order_id = order["orderId"]
+
+                if position_side and position_side in self.orders:
+                    self.orders[position_side]["order_id"] = new_order_id
+                    self.orders[position_side]["price"]    = new_price
+                else:
+                    self.order_id      = new_order_id
+                    self.current_price = new_price
 
             except Exception as e2:
                 print(f"Fallback failed: {e2}")
 
-    def start_trailing_loop(self, distance: float, interval: float = 2.0):
+    def start_trailing_loop(self, distance: float, interval: float = 2.0, position_side: str = None):
         # если трейлинг выключен — не запускаем
         if not self.trailing_enabled:
             return
 
-        # если уже запущен — не дублируем
-        if self._trailing_active:
-            return
+        if position_side:
+            # multi-order режим
+            if self.trailing_active.get(position_side):
+                return
 
-        self._trailing_active = True
-        print(f"[Trailing STARTED] {self.symbol} | interval={interval}s | distance={distance}%")
+            self.trailing_active[position_side] = True
+            print(f"[Trailing STARTED] {self.symbol} | {position_side} | interval={interval}s | distance={distance}%")
 
-        def loop():
-            while self._trailing_active and self.order_id:
-                try:
-                    current_price = self.exchange.get_price(self.symbol)
+            def loop():
+                while self.trailing_active.get(position_side) and self.orders.get(position_side, {}).get("order_id"):
+                    try:
+                        entry = self.orders.get(position_side)
+                        if not entry:
+                            break
+                        side = entry["side"]
 
-                    if self.side == "BUY":
-                        target_price = current_price * (1 - distance / 100)
-                    else:
-                        target_price = current_price * (1 + distance / 100)
+                        current_price = self.exchange.get_price(self.symbol)
 
-                    print(f"[Trailing] {self.symbol} | market={current_price} | target={target_price}")
-                    self.update_order(target_price)
+                        if side == "BUY":
+                            target_price = current_price * (1 - distance / 100)
+                        else:
+                            target_price = current_price * (1 + distance / 100)
 
-                    time.sleep(interval)
+                        print(f"[Trailing] {self.symbol} | {position_side} | market={current_price} | target={target_price}")
+                        self.update_order(target_price, position_side=position_side)
 
-                except Exception as e:
-                    print(f"[Trailing ERROR] {self.symbol} | {e}")
-                    time.sleep(interval)
+                        time.sleep(interval)
 
-        self._trailing_thread = threading.Thread(target=loop, daemon=True)
-        self._trailing_thread.start()
+                    except Exception as e:
+                        print(f"[Trailing ERROR] {self.symbol} | {position_side} | {e}")
+                        time.sleep(interval)
 
-    def stop_trailing(self):
-        self._trailing_active = False
-        print(f"[Trailing STOPPED] {self.symbol}")
+            t = threading.Thread(target=loop, daemon=True)
+            self.trailing_threads[position_side] = t
+            t.start()
+
+        else:
+            # старый single-order режим
+            if self._trailing_active:
+                return
+
+            self._trailing_active = True
+            print(f"[Trailing STARTED] {self.symbol} | interval={interval}s | distance={distance}%")
+
+            def loop():
+                while self._trailing_active and self.order_id:
+                    try:
+                        current_price = self.exchange.get_price(self.symbol)
+
+                        if self.side == "BUY":
+                            target_price = current_price * (1 - distance / 100)
+                        else:
+                            target_price = current_price * (1 + distance / 100)
+
+                        print(f"[Trailing] {self.symbol} | market={current_price} | target={target_price}")
+                        self.update_order(target_price)
+
+                        time.sleep(interval)
+
+                    except Exception as e:
+                        print(f"[Trailing ERROR] {self.symbol} | {e}")
+                        time.sleep(interval)
+
+            self._trailing_thread = threading.Thread(target=loop, daemon=True)
+            self._trailing_thread.start()
+
+    def stop_trailing(self, position_side: str = None):
+        if position_side:
+            self.trailing_active[position_side] = False
+            self.trailing_threads.pop(position_side, None)
+            print(f"[Trailing STOPPED] {self.symbol} | {position_side}")
+        else:
+            self._trailing_active = False
+            print(f"[Trailing STOPPED] {self.symbol}")
+
+    # ------------------------------------------------------------------
+    # Новый слой: методы принимают OrderRequest / работают через executor
+    # Существующий place_order / update_order НЕ затронуты
+    # ------------------------------------------------------------------
+
+    def cancel_order(self, order_id: int = None) -> dict | None:
+        """Отменяет текущий (или указанный) ордер."""
+        oid = order_id if order_id is not None else self.order_id
+        if not oid:
+            return None
+        return self.exchange.cancel_order(self.symbol, oid)
+
+    def place_request(self, request: OrderRequest, position_side: str = None) -> dict:
+        """Размещает ордер через OrderRequest → executor. Trailing не запускает."""
+        if not request.params or not request.params.get("position_side"):
+            self.stop_trailing()
+
+        if request.order_type == "market":
+            order = self._market_executor.place(request)
+        else:
+            order = self._limit_executor.place(request)
+
+        self.order_id = order["orderId"]
+        self.current_price = request.price
+        self.side = request.side
+        self.quantity = request.quantity
+
+        # сохраняем в новую структуру
+        ps = request.params.get("position_side") if request.params else None
+        if not ps:
+            ps = "LONG" if request.side == "BUY" else "SHORT"
+        self.orders[ps] = {
+            "order_id": order["orderId"],
+            "price": request.price,
+            "quantity": request.quantity,
+            "side": request.side,
+        }
+
+        return order
+
+    def modify_order(self, request: OrderRequest) -> dict | None:
+        """Модифицирует текущий ордер через OrderRequest → LimitExecutor."""
+        if not self.order_id:
+            return None
+        result = self._limit_executor.modify(self.order_id, request)
+        self.current_price = request.price
+        return result

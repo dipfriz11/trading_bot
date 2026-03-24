@@ -30,12 +30,17 @@ class SingleOrderStrategy:
 
         print(f"[{self.symbol}] placing order | side={order_side} price={target_price}")
 
-        # размещаем ордер через OrderManager
-        self.order_manager.place_order(
+        # размещаем ордер через OrderRequest → executor
+        from order.order_request import OrderRequest
+        request = OrderRequest(
+            symbol=self.symbol,
             side=order_side,
+            order_type="limit",
+            quantity=amount,
             price=target_price,
-            quantity=amount
+            params={}
         )
+        self.order_manager.place_request(request)
 
         distance = self.config.get("distance", 1.5)
         self.order_manager.start_trailing_loop(distance)
