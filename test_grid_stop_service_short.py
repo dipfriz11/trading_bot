@@ -16,14 +16,15 @@ if __name__ == "__main__":
     service = GridService(builder, runner, registry, exchange, sizer)
 
     symbol = GRID_CONFIG["symbol"]
+    position_side = "SHORT"
 
     session = None
 
     try:
         # --- Старт сессии ---
         session = service.start_session(
-            symbol=GRID_CONFIG["symbol"],
-            position_side=GRID_CONFIG["position_side"],
+            symbol=symbol,
+            position_side=position_side,
             total_budget=GRID_CONFIG["total_budget"],
             levels_count=GRID_CONFIG["levels_count"],
             step_percent=GRID_CONFIG["step_percent"],
@@ -32,7 +33,7 @@ if __name__ == "__main__":
             budget_mode=GRID_CONFIG["budget_mode"],
         )
 
-        print(f"\n=== SESSION STARTED ===")
+        print(f"\n=== SHORT SESSION STARTED ===")
         print(f"session_id:  {session.session_id}")
         print(f"status:      {session.status}")
         print("levels:")
@@ -40,7 +41,7 @@ if __name__ == "__main__":
             print(f"  [{lvl.index}] price={lvl.price}  status={lvl.status}  order_id={lvl.order_id}")
 
         # --- Проверка registry до stop ---
-        before_stop = service.get_session(symbol, "LONG")
+        before_stop = service.get_session(symbol, "SHORT")
         all_before = service.get_all_sessions()
 
         print(f"\n=== REGISTRY BEFORE STOP ===")
@@ -48,9 +49,9 @@ if __name__ == "__main__":
         print(f"total sessions:     {len(all_before)}")
 
         # --- Stop сессии ---
-        stopped_session = service.stop_session(symbol, "LONG")
+        stopped_session = service.stop_session(symbol, "SHORT")
 
-        print(f"\n=== SESSION STOPPED ===")
+        print(f"\n=== SHORT SESSION STOPPED ===")
         print(f"session_id:  {stopped_session.session_id}")
         print(f"status:      {stopped_session.status}")
         print("levels:")
@@ -58,7 +59,7 @@ if __name__ == "__main__":
             print(f"  [{lvl.index}] price={lvl.price}  status={lvl.status}  order_id={lvl.order_id}")
 
         # --- Проверка registry после stop ---
-        after_stop = service.get_session(symbol, "LONG")
+        after_stop = service.get_session(symbol, "SHORT")
         all_after = service.get_all_sessions()
 
         print(f"\n=== REGISTRY AFTER STOP ===")
@@ -67,10 +68,10 @@ if __name__ == "__main__":
 
     finally:
         # --- Fallback cleanup ---
-        remaining = service.get_session(symbol, "LONG")
+        remaining = service.get_session(symbol, "SHORT")
         if remaining is not None:
             print("\n=== FALLBACK CLEANUP ===")
-            service.stop_session(symbol, "LONG")
+            service.stop_session(symbol, "SHORT")
             print("  fallback stop_session called")
 
     print("\nTEST DONE")

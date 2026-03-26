@@ -16,14 +16,15 @@ if __name__ == "__main__":
     service = GridService(builder, runner, registry, exchange, sizer)
 
     symbol = GRID_CONFIG["symbol"]
+    position_side = "SHORT"
 
     session = None
 
     try:
         # --- Запуск сессии через GridService ---
         session = service.start_session(
-            symbol=GRID_CONFIG["symbol"],
-            position_side=GRID_CONFIG["position_side"],
+            symbol=symbol,
+            position_side=position_side,
             total_budget=GRID_CONFIG["total_budget"],
             levels_count=GRID_CONFIG["levels_count"],
             step_percent=GRID_CONFIG["step_percent"],
@@ -33,7 +34,7 @@ if __name__ == "__main__":
         )
 
         # --- Вывод результата ---
-        print(f"\n=== LONG SESSION ===")
+        print(f"\n=== SHORT SESSION ===")
         print(f"session_id:     {session.session_id}")
         print(f"symbol:         {session.symbol}")
         print(f"position_side:  {session.position_side}")
@@ -44,7 +45,7 @@ if __name__ == "__main__":
             print(f"         order_id={lvl.order_id}  client_order_id={lvl.client_order_id}")
 
         # --- Проверка registry ---
-        fetched = service.get_session(symbol, "LONG")
+        fetched = service.get_session(symbol, "SHORT")
         all_sessions = service.get_all_sessions()
 
         print(f"\n=== REGISTRY CHECK ===")

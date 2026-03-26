@@ -28,3 +28,9 @@ class BaseExchange:
     
     def calculate_fee(self, order_type: str, notional: float) -> float:
         raise NotImplementedError
+
+    def get_symbol_metadata(self, symbol: str) -> dict:
+        raise NotImplementedError
+
+    def round_order_params(self, symbol: str, side: str, quantity: float, price: float) -> tuple:
+        raise NotImplementedError

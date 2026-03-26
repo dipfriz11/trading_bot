@@ -39,6 +39,23 @@ class BinanceExchange(BaseExchange):
             if s["symbol"] == symbol
         )
 
+    def get_symbol_metadata(self, symbol: str) -> dict:
+        symbol_info = self.get_symbol_info(symbol)
+        lot_size = next(f for f in symbol_info["filters"] if f["filterType"] == "LOT_SIZE")
+        min_notional = next(f for f in symbol_info["filters"] if f["filterType"] == "MIN_NOTIONAL")
+        return {
+            "min_qty":      float(lot_size["minQty"]),
+            "step_size":    float(lot_size["stepSize"]),
+            "min_notional": float(min_notional["notional"]),
+        }
+
+    def round_order_params(self, symbol: str, side: str, quantity: float, price: float) -> tuple:
+        symbol_info = self.get_symbol_info(symbol)
+        normalized_side = "BUY" if side.upper() in ("BUY", "LONG") else "SELL"
+        rounded_qty   = self._round_quantity(symbol_info, quantity)
+        rounded_price = self._round_price(symbol_info, price, normalized_side)
+        return (rounded_qty, rounded_price)
+
     # ==============================
     # LEVERAGE
     # ==============================

@@ -11,6 +11,8 @@ class GridBuilder:
         levels_count: int,
         step_percent: float,
         base_qty: float,
+        qty_mode: str = "fixed",
+        qty_multiplier: float = 1.0,
     ) -> GridSession:
 
         session = GridSession(symbol=symbol, position_side=position_side)
@@ -23,10 +25,17 @@ class GridBuilder:
             else:
                 price = base_price + step
 
+            if qty_mode == "fixed":
+                qty = base_qty
+            elif qty_mode == "multiplier":
+                qty = base_qty * (qty_multiplier ** i)
+            else:
+                raise ValueError(f"Unsupported qty_mode: {qty_mode!r}")
+
             level = GridLevel(
                 index=i + 1,
                 price=price,
-                qty=base_qty,
+                qty=qty,
                 position_side=position_side,
                 status="planned",
             )
