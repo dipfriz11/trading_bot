@@ -23,20 +23,51 @@ class GridService:
         qty_multiplier: float = 1.0,
         budget_mode: str = "usdt_total",
         coin_total: float = 0.0,
+        orders_count: Optional[int] = None,
+        first_price: Optional[float] = None,
+        last_price: Optional[float] = None,
+        distribution_mode: Optional[str] = None,
+        distribution_value: float = 1.0,
     ) -> GridSession:
-        base_price = self.exchange.get_price(symbol)
+        use_new_grid_mode = all(
+            value is not None
+            for value in (orders_count, first_price, last_price, distribution_mode)
+        )
+
+        if use_new_grid_mode:
+            base_price_for_sizer = first_price
+            effective_levels_count = orders_count
+        else:
+            base_price_for_sizer = self.exchange.get_price(symbol)
+            effective_levels_count = levels_count
+
+        if use_new_grid_mode:
+            if position_side == "LONG" and not (first_price > last_price):
+                raise ValueError(
+                    f"LONG grid requires first_price > last_price, got first_price={first_price}, last_price={last_price}"
+                )
+            if position_side == "SHORT" and not (first_price < last_price):
+                raise ValueError(
+                    f"SHORT grid requires first_price < last_price, got first_price={first_price}, last_price={last_price}"
+                )
+
         base_qty = self.sizer.calculate_base_qty(
-            total_budget, base_price, levels_count, qty_mode, qty_multiplier, budget_mode, coin_total
+            total_budget, base_price_for_sizer, effective_levels_count, qty_mode, qty_multiplier, budget_mode, coin_total
         )
         session = self.builder.build_session(
             symbol=symbol,
             position_side=position_side,
-            base_price=base_price,
-            levels_count=levels_count,
+            base_price=base_price_for_sizer,
+            levels_count=effective_levels_count,
             step_percent=step_percent,
             base_qty=base_qty,
             qty_mode=qty_mode,
             qty_multiplier=qty_multiplier,
+            orders_count=orders_count,
+            first_price=first_price,
+            last_price=last_price,
+            distribution_mode=distribution_mode,
+            distribution_value=distribution_value,
         )
 
         metadata = self.exchange.get_symbol_metadata(symbol)
