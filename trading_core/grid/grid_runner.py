@@ -1,4 +1,6 @@
-from trading_core.grid.grid_models import GridSession
+from typing import List
+
+from trading_core.grid.grid_models import GridLevel, GridSession
 
 
 class GridRunner:
@@ -36,5 +38,42 @@ class GridRunner:
 
         if any_placed:
             session.status = "running"
+
+        return session
+
+    def modify_session_orders(self, session: GridSession, new_levels: List[GridLevel]) -> GridSession:
+        if len(session.levels) != len(new_levels):
+            raise ValueError(
+                f"levels count mismatch: session has {len(session.levels)}, new_levels has {len(new_levels)}"
+            )
+
+        for level, new_level in zip(session.levels, new_levels):
+            if level.status != "placed":
+                continue
+
+            if not level.order_id:
+                raise ValueError(
+                    f"Level {level.index}: status='placed' but order_id is missing"
+                )
+
+            if level.position_side == "LONG":
+                side = "BUY"
+            elif level.position_side == "SHORT":
+                side = "SELL"
+            else:
+                raise ValueError(f"Unsupported position_side: {level.position_side!r}")
+
+            response = self.exchange.modify_order(
+                symbol=session.symbol,
+                order_id=int(level.order_id),
+                side=side,
+                quantity=new_level.qty,
+                price=new_level.price,
+                position_side=level.position_side,
+            )
+
+            level.price = new_level.price
+            level.qty = new_level.qty
+            level.client_order_id = response.get("clientOrderId", level.client_order_id)
 
         return session

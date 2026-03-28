@@ -13,6 +13,34 @@
 
 ---
 
+## [2026-03-28] offset mode для GridService.start_session — реализовано и протестировано live
+
+### Что сделано
+
+Добавлен альтернативный режим задания диапазона сетки через проценты от текущей цены:
+
+- `first_offset_percent` / `last_offset_percent` — смещение от `current_price` в %
+- LONG: `first_price = current_price * (1 - offset/100)`, цены уходят вниз от рынка
+- SHORT: `first_price = current_price * (1 + offset/100)`, цены уходят вверх от рынка
+
+### Изменённые файлы
+
+- `trading_core/grid/grid_service.py` — `start_session`: новые параметры `first_offset_percent` / `last_offset_percent`, mutual exclusion guard (нельзя одновременно указывать price и offset поля), `offset_mode` вычисление, расчёт `first_price` / `last_price` из смещений, `else raise ValueError` на неподдерживаемый `position_side`
+
+### Валидация
+
+- mixed price + offset → `ValueError` ✓
+- invalid `position_side` → `ValueError` ✓
+- LONG: `first_price < current_price`, `last_price < first_price` ✓
+- SHORT: `first_price > current_price`, `last_price > first_price` ✓
+
+### Live тест
+
+- `test_grid_service_offset_live.py` — LONG и SHORT с реальными ордерами на Binance Futures ANIMEUSDT
+- все ордера размещены и отменены корректно
+
+---
+
 ## 2026-03-11
 
 ### Что сделали сегодня
