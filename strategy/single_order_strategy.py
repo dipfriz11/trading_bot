@@ -1,4 +1,5 @@
 from order.order_manager import OrderManager
+from trading_core.watchers.single_trailing_watcher import SingleTrailingWatcher
 
 
 class SingleOrderStrategy:
@@ -8,6 +9,7 @@ class SingleOrderStrategy:
         self.exchange = widget.exchange
         self.config = widget.config
         self.symbol = widget.symbol
+        self.trailing_watcher = None
 
         self.order_manager = OrderManager(
             exchange=self.exchange,
@@ -42,5 +44,12 @@ class SingleOrderStrategy:
         )
         self.order_manager.place_request(request)
 
-        distance = self.config.get("distance", 1.5)
-        self.order_manager.start_trailing_loop(distance)
+        distance    = self.config.get("distance", 1.5)
+        market_data = getattr(self.widget, "market_data", None)
+
+        if market_data is not None:
+            if self.trailing_watcher is None:
+                self.trailing_watcher = SingleTrailingWatcher(self.order_manager, market_data)
+            self.trailing_watcher.start_watching(self.symbol, distance)
+        else:
+            self.order_manager.start_trailing_loop(distance)

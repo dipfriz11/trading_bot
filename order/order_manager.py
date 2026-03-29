@@ -131,6 +131,28 @@ class OrderManager:
             except Exception as e2:
                 print(f"Fallback failed: {e2}")
 
+    def _apply_trailing_price(self, price: float, distance: float, position_side: str = None) -> None:
+        if position_side:
+            entry = self.orders.get(position_side)
+            if not entry:
+                return
+            side = entry["side"]
+            if side == "BUY":
+                target_price = price * (1 - distance / 100)
+            else:
+                target_price = price * (1 + distance / 100)
+            print(f"[Trailing] {self.symbol} | {position_side} | market={price} | target={target_price}")
+            self.update_order(target_price, position_side=position_side)
+        else:
+            if not self.side:
+                return
+            if self.side == "BUY":
+                target_price = price * (1 - distance / 100)
+            else:
+                target_price = price * (1 + distance / 100)
+            print(f"[Trailing] {self.symbol} | market={price} | target={target_price}")
+            self.update_order(target_price)
+
     def start_trailing_loop(self, distance: float, interval: float = 2.0, position_side: str = None):
         # если трейлинг выключен — не запускаем
         if not self.trailing_enabled:
@@ -147,20 +169,8 @@ class OrderManager:
             def loop():
                 while self.trailing_active.get(position_side) and self.orders.get(position_side, {}).get("order_id"):
                     try:
-                        entry = self.orders.get(position_side)
-                        if not entry:
-                            break
-                        side = entry["side"]
-
                         current_price = self.exchange.get_price(self.symbol)
-
-                        if side == "BUY":
-                            target_price = current_price * (1 - distance / 100)
-                        else:
-                            target_price = current_price * (1 + distance / 100)
-
-                        print(f"[Trailing] {self.symbol} | {position_side} | market={current_price} | target={target_price}")
-                        self.update_order(target_price, position_side=position_side)
+                        self._apply_trailing_price(price=current_price, distance=distance, position_side=position_side)
 
                         time.sleep(interval)
 
@@ -184,14 +194,7 @@ class OrderManager:
                 while self._trailing_active and self.order_id:
                     try:
                         current_price = self.exchange.get_price(self.symbol)
-
-                        if self.side == "BUY":
-                            target_price = current_price * (1 - distance / 100)
-                        else:
-                            target_price = current_price * (1 + distance / 100)
-
-                        print(f"[Trailing] {self.symbol} | market={current_price} | target={target_price}")
-                        self.update_order(target_price)
+                        self._apply_trailing_price(price=current_price, distance=distance)
 
                         time.sleep(interval)
 

@@ -1419,3 +1419,83 @@ SimpleGridConfig v1 — завершён
 - trailing grid
 - TP module
 - SL module
+
+## [2026-03-28] Grid trailing stack v1 — completed and live tested
+
+### Что сделано
+Реализован и проверен полный базовый стек для сетки:
+- SimpleGridConfig v1
+- offset mode для диапазона сетки
+- modify grid v1 через Binance Amend API
+- trailing grid v1
+- общий websocket слой MarketDataService v1
+- GridTrailingWatcher v1
+
+### Изменённые части
+- `trading_core/grid/grid_service.py`
+  - offset mode
+  - modify_session(...)
+  - trailing config / enable_trailing / check_trailing / disable_trailing
+  - trailing hot-path переведён на `check_trailing(..., price)` без внутреннего REST get_price
+
+- `trading_core/grid/grid_runner.py`
+  - `modify_session_orders(...)` для amend price + qty существующих grid-ордеров
+
+- `trading_core/market_data/market_data_service.py`
+  - общий websocket market data layer
+  - subscribe / unsubscribe
+  - latest price cache
+  - listeners per symbol
+
+- `trading_core/watchers/grid_trailing_watcher.py`
+  - watcher для автоматического grid trailing от websocket price updates
+  - in_flight guard
+  - cooldown
+  - graceful stop fix для race при остановке
+
+### Live-подтверждение
+- modify grid v1:
+  - LONG PASS
+  - SHORT PASS
+  - order_id preserved
+  - prices changed
+  - qtys changed
+  - cleanup PASS
+
+- trailing grid v1:
+  - LONG PASS
+  - SHORT PASS
+  - trigger PASS
+  - modify via trailing PASS
+  - anchor update PASS
+  - second check None PASS
+  - cleanup PASS
+
+- GridTrailingWatcher v1:
+  - first tick PASS
+  - watcher trigger PASS
+  - order_ids preserved
+  - prices changed
+  - qtys changed
+  - cleanup PASS
+  - race с APIError -2013 устранён
+
+### Архитектурный итог
+Собран первый event-driven контур терминального уровня:
+websocket price -> MarketDataService -> GridTrailingWatcher -> GridService.check_trailing(..., price) -> modify_session(...)
+
+[2026-03-28] v0.13.2 finalized and pushed
+
+Что зафиксировали:
+- завершён event-driven grid trailing stack
+- в репозиторий отправлен полный релизный набор файлов
+- отдельно добавлены:
+  - test_grid_service_offset_live.py
+  - trading_core/market_data/__init__.py
+  - trading_core/watchers/__init__.py
+- тег v0.13.2 перенесён на актуальный верхний коммит
+- коммиты и тег отправлены в origin/master
+
+Итог:
+v0.13.2 теперь корректно отражает полный локально проверенный этап,
+а не промежуточное состояние без offset live test и package init files

@@ -13,6 +13,7 @@ class Widget:
         self.config = config["config"]
 
         self.exchange = exchange
+        self.market_data = None
 
         self.is_running = False
 
@@ -36,6 +37,10 @@ class Widget:
 
     def stop(self):
         self.is_running = False
+        if self.strategy is not None and hasattr(self.strategy, "trailing_watcher"):
+            watcher = self.strategy.trailing_watcher
+            if watcher is not None:
+                watcher.stop_all()
 
     def set_stop_new(self, enabled: bool, mode: str = "entries_only"):
         self.stop_new_enabled = enabled
