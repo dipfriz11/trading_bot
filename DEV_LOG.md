@@ -1499,3 +1499,36 @@ websocket price -> MarketDataService -> GridTrailingWatcher -> GridService.check
 Итог:
 v0.13.2 теперь корректно отражает полный локально проверенный этап,
 а не промежуточное состояние без offset live test и package init files
+
+[2026-03-29] v0.13.3 websocket trailing path for single orders
+
+Что сделали:
+- вынесли расчёт trailing target в отдельный helper в OrderManager
+- добавили SingleTrailingWatcher как отдельный watcher-слой поверх MarketDataService
+- подключили single order strategy к websocket trailing path через widget.market_data
+- сохранили fallback на старый polling path, если market_data не передан
+- добавили lifecycle cleanup:
+  - widget.stop() -> watcher.stop_all()
+- устранили race на BUY -> SELL re-watch без stop/start stream:
+  - теперь listener перевешивается без unsubscribe/subscribe того же symbol
+- добавили отдельный smoke test:
+  - test_real_single_order_ws.py
+
+Что подтверждено тестами:
+- BUY trailing через WS: PASS
+- SELL trailing через WS: PASS
+- re-watch BUY -> SELL: PASS
+- widget.stop cleanup: PASS
+- KeyError streams=... устранён
+- на PLAYUSDT подтверждены реальные modify как для LONG, так и для SHORT
+
+Архитектурный итог:
+Появился общий terminal-grade path не только для grid trailing,
+но и для single order trailing:
+
+websocket price
+-> MarketDataService
+-> SingleTrailingWatcher
+-> OrderManager._apply_trailing_price(...)
+-> update_order(...)
+-> exchange.modify_order(...)

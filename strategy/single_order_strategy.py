@@ -23,6 +23,8 @@ class SingleOrderStrategy:
 
         price = self.exchange.get_price(self.symbol)
 
+        position_side = "LONG" if side == "buy" else "SHORT"
+
         if side == "buy":
             target_price = price * (1 - distance / 100)
             order_side = "BUY"
@@ -40,7 +42,7 @@ class SingleOrderStrategy:
             order_type="limit",
             quantity=amount,
             price=target_price,
-            params={}
+            params={"position_side": position_side}
         )
         self.order_manager.place_request(request)
 
@@ -50,6 +52,6 @@ class SingleOrderStrategy:
         if market_data is not None:
             if self.trailing_watcher is None:
                 self.trailing_watcher = SingleTrailingWatcher(self.order_manager, market_data)
-            self.trailing_watcher.start_watching(self.symbol, distance)
+            self.trailing_watcher.start_watching(self.symbol, distance, position_side)
         else:
-            self.order_manager.start_trailing_loop(distance)
+            self.order_manager.start_trailing_loop(distance, position_side=position_side)

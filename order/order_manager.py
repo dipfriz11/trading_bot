@@ -228,8 +228,10 @@ class OrderManager:
 
     def place_request(self, request: OrderRequest, position_side: str = None) -> dict:
         """Размещает ордер через OrderRequest → executor. Trailing не запускает."""
-        if not request.params or not request.params.get("position_side"):
-            self.stop_trailing()
+        ps = request.params.get("position_side") if request.params else None
+        if not ps:
+            ps = "LONG" if request.side == "BUY" else "SHORT"
+        self.stop_trailing(position_side=ps)
 
         if request.order_type == "market":
             order = self._market_executor.place(request)
@@ -242,9 +244,6 @@ class OrderManager:
         self.quantity = request.quantity
 
         # сохраняем в новую структуру
-        ps = request.params.get("position_side") if request.params else None
-        if not ps:
-            ps = "LONG" if request.side == "BUY" else "SHORT"
         self.orders[ps] = {
             "order_id": order["orderId"],
             "price": request.price,
