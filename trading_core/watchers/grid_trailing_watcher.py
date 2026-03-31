@@ -82,6 +82,11 @@ class GridTrailingWatcher:
             with self._lock:
                 if key not in self._watched:
                     return
+
+            hit = self._grid_service.check_tpsl(symbol, position_side, price)
+            if hit is not None:
+                return
+
             result = self._grid_service.check_trailing(symbol, position_side, price)
             if result is not None:
                 with self._lock:

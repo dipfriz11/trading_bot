@@ -33,6 +33,9 @@ class OrderManager:
         self._market_executor = MarketExecutor(exchange)
         self._limit_executor = LimitExecutor(exchange)
 
+        # exchange-native TP/SL algo orders: { position_side: {"tp_algo_id": int, "sl_algo_id": int} }
+        self.tpsl = {}
+
     def place_order(self, side, price, quantity, position_side=None):
         # останавливаем предыдущий trailing (если был)
         self.stop_trailing()
@@ -260,3 +263,53 @@ class OrderManager:
         result = self._limit_executor.modify(self.order_id, request)
         self.current_price = request.price
         return result
+
+    # ------------------------------------------------------------------
+    # Exchange-native TP/SL (algo orders)
+    # Не подключены к execute() — вызываются через on_position_confirmed()
+    # ------------------------------------------------------------------
+
+    def place_tpsl(self, entry_price: float, qty: float,
+                   position_side: str, tp_pct: float, sl_pct: float) -> dict:
+        """Ставит TAKE_PROFIT (limit) + STOP_MARKET для position_side.
+        symbol_info получает сам. Возвращает {"tp_algo_id": ..., "sl_algo_id": ...}.
+        """
+        symbol_info = self.exchange.get_symbol_info(self.symbol)
+        side      = "SELL" if position_side == "LONG" else "BUY"
+        tp_factor = (1 + tp_pct / 100) if position_side == "LONG" else (1 - tp_pct / 100)
+        sl_factor = (1 - sl_pct / 100) if position_side == "LONG" else (1 + sl_pct / 100)
+        tp_price  = self.exchange._round_price(symbol_info, entry_price * tp_factor, side)
+        sl_price  = self.exchange._round_price(symbol_info, entry_price * sl_factor, side)
+
+        tp_resp = self.exchange.client.futures_create_order(
+            symbol=self.symbol, side=side, positionSide=position_side,
+            type="TAKE_PROFIT", stopPrice=tp_price, price=tp_price,
+            quantity=qty, timeInForce="GTC", workingType="MARK_PRICE",
+        )
+        sl_resp = self.exchange.client.futures_create_order(
+            symbol=self.symbol, side=side, positionSide=position_side,
+            type="STOP_MARKET", stopPrice=sl_price,
+            closePosition=True, workingType="MARK_PRICE",
+        )
+        self.tpsl[position_side] = {
+            "tp_algo_id": tp_resp["algoId"],
+            "sl_algo_id": sl_resp["algoId"],
+        }
+        return self.tpsl[position_side]
+
+    def cancel_tpsl(self, position_side: str) -> None:
+        """Отменяет оба защитных ордера для position_side."""
+        state = self.tpsl.pop(position_side, None)
+        if not state:
+            return
+        for key, label in [("tp_algo_id", "TP"), ("sl_algo_id", "SL")]:
+            aid = state.get(key)
+            if aid:
+                try:
+                    self.exchange.client.futures_cancel_algo_order(algoId=aid)
+                except Exception as e:
+                    print(f"[{self.symbol}] cancel {label} algoId={aid}: {e}")
+
+    def has_tpsl(self, position_side: str) -> bool:
+        """Возвращает True если для position_side есть активные TP/SL ордера."""
+        return position_side in self.tpsl

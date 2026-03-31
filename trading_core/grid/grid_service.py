@@ -5,6 +5,12 @@ from trading_core.grid.grid_models import GridSession
 
 
 @dataclass
+class TpSlConfig:
+    tp_percent: float   # 3.0 → 3%
+    sl_percent: float   # 2.0 → 2%
+
+
+@dataclass
 class TrailingConfig:
     anchor_price: float
     trailing_step_percent: float
@@ -27,6 +33,7 @@ class GridService:
         self.exchange = exchange
         self.sizer = sizer
         self._trailing_configs: Dict[Tuple[str, str], TrailingConfig] = {}
+        self._tpsl_configs: Dict[Tuple[str, str], TpSlConfig] = {}
 
     def start_session(
         self,
@@ -351,3 +358,70 @@ class GridService:
 
     def disable_trailing(self, symbol: str, position_side: str) -> None:
         self._trailing_configs.pop((symbol, position_side), None)
+
+    # ------------------------------------------------------------------
+    # TP / SL
+    # ------------------------------------------------------------------
+
+    def enable_tpsl(self, symbol: str, position_side: str,
+                    tp_percent: float, sl_percent: float) -> None:
+        if self.registry.get_session(symbol, position_side) is None:
+            print(f"[TpSl] skip enable: session not found for {symbol}/{position_side}")
+            return
+        self._tpsl_configs[(symbol, position_side)] = TpSlConfig(
+            tp_percent=tp_percent,
+            sl_percent=sl_percent,
+        )
+
+    def disable_tpsl(self, symbol: str, position_side: str) -> None:
+        self._tpsl_configs.pop((symbol, position_side), None)
+
+    def close_leg(self, symbol: str, position_side: str) -> dict | None:
+        positions = self.exchange.get_positions(symbol)
+        for pos in positions:
+            if pos["positionSide"] == position_side:
+                qty = abs(float(pos["positionAmt"]))
+                if qty == 0:
+                    return None
+                close_side = "sell" if position_side == "LONG" else "buy"
+                return self.exchange.close_position(symbol, close_side, qty)
+        return None
+
+    def check_tpsl(self, symbol: str, position_side: str, price: float) -> Optional[str]:
+        if self.registry.get_session(symbol, position_side) is None:
+            return None
+
+        config = self._tpsl_configs.get((symbol, position_side))
+        if config is None:
+            return None
+
+        basis_price: float = 0.0
+        qty: float = 0.0
+        for pos in self.exchange.get_positions(symbol):
+            if pos["positionSide"] == position_side:
+                basis_price = float(pos["entryPrice"])
+                qty         = abs(float(pos["positionAmt"]))
+                break
+
+        if qty <= 0:
+            return None
+        if basis_price <= 0:
+            return None
+
+        if position_side == "LONG":
+            tp_price = basis_price * (1 + config.tp_percent / 100)
+            sl_price = basis_price * (1 - config.sl_percent / 100)
+            hit = "tp" if price >= tp_price else ("sl" if price <= sl_price else None)
+        else:  # SHORT
+            tp_price = basis_price * (1 - config.tp_percent / 100)
+            sl_price = basis_price * (1 + config.sl_percent / 100)
+            hit = "tp" if price <= tp_price else ("sl" if price >= sl_price else None)
+
+        if hit is None:
+            return None
+
+        print(f"[TpSl] {symbol}/{position_side} hit={hit}  price={price}  basis={basis_price}")
+        self.stop_session(symbol, position_side)
+        self.close_leg(symbol, position_side)
+        self.disable_tpsl(symbol, position_side)
+        return hit

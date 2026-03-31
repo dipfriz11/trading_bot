@@ -1532,3 +1532,34 @@ websocket price
 -> OrderManager._apply_trailing_price(...)
 -> update_order(...)
 -> exchange.modify_order(...)
+
+[2026-03-29] v0.13.4 independent hedge mode for single orders and grids
+
+Что сделали:
+- дотянули single order до независимого hedge-mode:
+  - LONG и SHORT теперь живут как отдельные legs
+  - SingleTrailingWatcher стал leg-aware по ключу (symbol, position_side)
+  - SingleOrderStrategy начал явно передавать position_side
+  - OrderManager.place_request останавливает trailing только своей ноги
+  - добавлен hedge smoke test:
+    - test_real_single_order_hedge_ws.py
+
+- дотянули grid trailing до независимого hedge-mode:
+  - GridTrailingWatcher стал leg-aware по ключу (symbol, position_side)
+  - per-leg start_watching / stop_watching
+  - per-leg cooldown / in_flight
+  - убран конфликт, при котором одна нога могла блокировать вторую
+  - добавлен hedge smoke test:
+    - test_grid_watcher_trailing_hedge_live.py
+
+Что подтверждено тестами:
+- single order LONG + SHORT одновременно: PASS
+- single trailing по обеим ногам независимо: PASS
+- grid LONG + SHORT одновременно: PASS
+- grid trailing по обеим ногам независимо: PASS
+- одна нога не убивает другую: PASS
+- cleanup / stop lifecycle: PASS
+
+Архитектурный итог:
+Теперь и single orders, и grids поддерживают независимый hedge-mode на одном symbol.
+Это создаёт правильную базу для следующих независимых TP/SL по каждой leg.
