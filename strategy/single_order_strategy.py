@@ -137,17 +137,29 @@ class SingleOrderStrategy:
         side_key = "long" if position_side == "LONG" else "short"
         side_cfg = self.config.get(side_key, {})
 
-        tp_val = side_cfg.get("tp_percent")
-        tp_pct = tp_val if tp_val is not None else self.config.get("tp_percent")
-
         sl_val = side_cfg.get("sl_percent")
         sl_pct = sl_val if sl_val is not None else self.config.get("sl_percent")
 
-        if tp_pct is not None and sl_pct is not None:
+        take_profits_val = side_cfg.get("take_profits")
+        if take_profits_val is None:
+            take_profits_val = self.config.get("take_profits")
+        use_multi_tp = isinstance(take_profits_val, list) and len(take_profits_val) > 0
+
+        if use_multi_tp and sl_pct is not None:
+            self.order_manager.validate_multi_tpsl(qty, take_profits_val)
             if self.order_manager.has_tpsl(position_side):
                 self.order_manager.cancel_tpsl(position_side)
-
-            ids = self.order_manager.place_tpsl(
-                entry_price, qty, position_side, tp_pct, sl_pct
+            state = self.order_manager.place_multi_tpsl(
+                entry_price, qty, position_side, take_profits_val, sl_pct
             )
-            print(f"[{self.symbol}] TP/SL placed: {ids}")
+            print(f"[{self.symbol}] multi-TP/SL placed: {state}")
+        else:
+            tp_val = side_cfg.get("tp_percent")
+            tp_pct = tp_val if tp_val is not None else self.config.get("tp_percent")
+            if tp_pct is not None and sl_pct is not None:
+                if self.order_manager.has_tpsl(position_side):
+                    self.order_manager.cancel_tpsl(position_side)
+                ids = self.order_manager.place_tpsl(
+                    entry_price, qty, position_side, tp_pct, sl_pct
+                )
+                print(f"[{self.symbol}] TP/SL placed: {ids}")

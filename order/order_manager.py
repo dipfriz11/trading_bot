@@ -297,18 +297,165 @@ class OrderManager:
         }
         return self.tpsl[position_side]
 
+    def validate_multi_tpsl(self, qty: float, take_profits: list) -> None:
+        """Валидирует take_profits конфиг против qty позиции и step_size символа.
+        Не ставит ордеров. Выбрасывает ValueError с описанием если невалидно.
+        """
+        from decimal import Decimal
+
+        if not isinstance(take_profits, list) or len(take_profits) == 0:
+            raise ValueError("take_profits must be a non-empty list")
+
+        for i, tp_cfg in enumerate(take_profits):
+            if "tp_percent" not in tp_cfg or "close_percent" not in tp_cfg:
+                raise ValueError(
+                    f"take_profits[{i}] must have 'tp_percent' and 'close_percent'"
+                )
+
+        total_close = sum(tp_cfg["close_percent"] for tp_cfg in take_profits)
+        if abs(total_close - 100) > 1e-8:
+            raise ValueError(
+                f"sum of close_percent must be 100, got {total_close}"
+            )
+
+        symbol_info = self.exchange.get_symbol_info(self.symbol)
+        step_size = next(
+            float(f["stepSize"])
+            for f in symbol_info["filters"]
+            if f["filterType"] == "LOT_SIZE"
+        )
+        step      = Decimal(str(step_size))
+        qty_dec   = Decimal(str(qty))
+        allocated = Decimal("0")
+
+        for i, tp_cfg in enumerate(take_profits):
+            close_pct = tp_cfg["close_percent"]
+            if i < len(take_profits) - 1:
+                raw    = qty_dec * Decimal(str(close_pct)) / Decimal("100")
+                tp_qty = float((raw // step) * step)
+                allocated += Decimal(str(tp_qty))
+            else:
+                remainder = qty_dec - allocated
+                tp_qty    = float((remainder // step) * step)
+
+            if tp_qty <= 0:
+                raise ValueError(
+                    f"take_profits[{i}] (tp_percent={tp_cfg['tp_percent']}, "
+                    f"close_percent={close_pct}%): computed qty={tp_qty} <= 0 — "
+                    f"position qty={qty} is too small for "
+                    f"step_size={float(step)} with close_percent={close_pct}%"
+                )
+
+    def place_multi_tpsl(
+        self,
+        entry_price: float,
+        qty: float,
+        position_side: str,
+        take_profits: list,
+        sl_pct: float,
+    ) -> dict:
+        """Ставит несколько TAKE_PROFIT (limit) + один STOP_MARKET.
+
+        take_profits: [{"tp_percent": float, "close_percent": float}, ...]
+        Сумма close_percent по всем элементам должна быть ровно 100.
+        Все TP кроме последнего получают floor(qty * close_percent / 100).
+        Последний TP получает остаток: qty - sum(предыдущих tp_qty).
+
+        Возвращает state:
+          {
+            "tps": [{"algo_id": int, "tp_percent": float,
+                     "close_percent": float, "qty": float}, ...],
+            "sl":  {"algo_id": int, "sl_percent": float},
+          }
+        """
+        from decimal import Decimal
+
+        self.validate_multi_tpsl(qty, take_profits)
+
+        symbol_info = self.exchange.get_symbol_info(self.symbol)
+        side        = "SELL" if position_side == "LONG" else "BUY"
+
+        sl_factor = (1 - sl_pct / 100) if position_side == "LONG" else (1 + sl_pct / 100)
+        sl_price  = self.exchange._round_price(symbol_info, entry_price * sl_factor, side)
+
+        step_size = next(
+            float(f["stepSize"])
+            for f in symbol_info["filters"]
+            if f["filterType"] == "LOT_SIZE"
+        )
+        step      = Decimal(str(step_size))
+        qty_dec   = Decimal(str(qty))
+
+        tps_state = []
+        allocated = Decimal("0")
+
+        for i, tp_cfg in enumerate(take_profits):
+            tp_pct    = tp_cfg["tp_percent"]
+            close_pct = tp_cfg["close_percent"]
+            tp_factor = (1 + tp_pct / 100) if position_side == "LONG" \
+                        else (1 - tp_pct / 100)
+            tp_price  = self.exchange._round_price(
+                symbol_info, entry_price * tp_factor, side
+            )
+
+            if i < len(take_profits) - 1:
+                raw    = qty_dec * Decimal(str(close_pct)) / Decimal("100")
+                tp_qty = float((raw // step) * step)
+                allocated += Decimal(str(tp_qty))
+            else:
+                remainder = qty_dec - allocated
+                tp_qty    = float((remainder // step) * step)
+
+            tp_resp = self.exchange.client.futures_create_order(
+                symbol=self.symbol, side=side, positionSide=position_side,
+                type="TAKE_PROFIT", stopPrice=tp_price, price=tp_price,
+                quantity=tp_qty, timeInForce="GTC", workingType="MARK_PRICE",
+            )
+            tps_state.append({
+                "algo_id":       tp_resp["algoId"],
+                "tp_percent":    tp_pct,
+                "close_percent": close_pct,
+                "qty":           tp_qty,
+            })
+
+        sl_resp = self.exchange.client.futures_create_order(
+            symbol=self.symbol, side=side, positionSide=position_side,
+            type="STOP_MARKET", stopPrice=sl_price,
+            closePosition=True, workingType="MARK_PRICE",
+        )
+
+        self.tpsl[position_side] = {
+            "tps": tps_state,
+            "sl":  {"algo_id": sl_resp["algoId"], "sl_percent": sl_pct},
+        }
+        return self.tpsl[position_side]
+
     def cancel_tpsl(self, position_side: str) -> None:
-        """Отменяет оба защитных ордера для position_side."""
+        """Отменяет защитные ордера для position_side.
+        Поддерживает старый формат {tp_algo_id, sl_algo_id}
+        и новый multi-TP формат {tps: [...], sl: {...}}.
+        """
         state = self.tpsl.pop(position_side, None)
         if not state:
             return
-        for key, label in [("tp_algo_id", "TP"), ("sl_algo_id", "SL")]:
-            aid = state.get(key)
-            if aid:
-                try:
-                    self.exchange.client.futures_cancel_algo_order(algoId=aid)
-                except Exception as e:
-                    print(f"[{self.symbol}] cancel {label} algoId={aid}: {e}")
+
+        def _cancel(algo_id: int, label: str) -> None:
+            try:
+                self.exchange.client.futures_cancel_algo_order(algoId=algo_id)
+            except Exception as e:
+                print(f"[{self.symbol}] cancel {label} algoId={algo_id}: {e}")
+
+        if "tps" in state:
+            for i, tp in enumerate(state.get("tps", [])):
+                _cancel(tp["algo_id"], f"TP[{i}]")
+            sl = state.get("sl", {})
+            if sl.get("algo_id"):
+                _cancel(sl["algo_id"], "SL")
+        else:
+            for key, label in [("tp_algo_id", "TP"), ("sl_algo_id", "SL")]:
+                aid = state.get(key)
+                if aid:
+                    _cancel(aid, label)
 
     def has_tpsl(self, position_side: str) -> bool:
         """Возвращает True если для position_side есть активные TP/SL ордера."""
