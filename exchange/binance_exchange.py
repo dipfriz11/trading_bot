@@ -345,6 +345,30 @@ class BinanceExchange(BaseExchange):
             orderId=order_id
         )
 
+    def place_stop_market_order(self, symbol: str, position_side: str, stop_price: float) -> int:
+        """
+        Ставит STOP_MARKET с closePosition=True на Binance Futures (hedge mode).
+        LONG SL → side=SELL, SHORT SL → side=BUY.
+        Использует Algo Order API (/fapi/v1/algoOrder) → возвращает algoId.
+        workingType=MARK_PRICE — стандарт для стоп-ордеров на фьючерсах.
+        """
+        symbol_info  = self.get_symbol_info(symbol)
+        close_side   = "SELL" if position_side == "LONG" else "BUY"
+        rounded_stop = self._round_price(symbol_info, stop_price, close_side)
+        resp = self.client.futures_create_order(
+            symbol=symbol,
+            side=close_side,
+            positionSide=position_side,
+            type="STOP_MARKET",
+            stopPrice=rounded_stop,
+            closePosition=True,
+            workingType="MARK_PRICE",
+        )
+        return resp["algoId"]
+
+    def cancel_algo_order(self, algo_id: int) -> None:
+        self.client.futures_cancel_algo_order(algoId=algo_id)
+
     def get_order(self, symbol: str, order_id: int):
         return self.client.futures_get_order(
             symbol=symbol,

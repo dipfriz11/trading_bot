@@ -87,6 +87,37 @@ class GridTrailingWatcher:
             if hit is not None:
                 return
 
+            filled = self._grid_service.check_grid_fills(symbol, position_side)
+            if filled:
+                for lvl in filled:
+                    print(
+                        f"[GridFills] {symbol}/{position_side}"
+                        f"  level[{lvl.index}] filled"
+                        f"  price={lvl.price}"
+                    )
+                mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                if mode == "reprice":
+                    updated = self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+                else:
+                    updated = self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
+                if updated is not None:
+                    print(
+                        f"[GridTP] {symbol}/{position_side}"
+                        f"  TP orders updated after averaging fill ({mode}): {len(updated)} orders"
+                    )
+                self._grid_service.update_sl_after_averaging(symbol, position_side)
+
+            filled_tps = self._grid_service.check_tp_fills(symbol, position_side)
+            if filled_tps:
+                for tp in filled_tps:
+                    print(
+                        f"[GridTP] {symbol}/{position_side}"
+                        f"  TP filled: order_id={tp['order_id']}"
+                        f"  tp_percent={tp['tp_percent']}%"
+                        f"  price={tp['price']:.8f}"
+                        f"  qty={tp['qty']}"
+                    )
+
             result = self._grid_service.check_trailing(symbol, position_side, price)
             if result is not None:
                 with self._lock:
