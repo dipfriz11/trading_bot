@@ -68,6 +68,7 @@ class GridBuilder:
         last_price: Optional[float] = None,
         distribution_mode: Optional[str] = None,
         distribution_value: float = 1.0,
+        level_reset_configs: Optional[List[dict]] = None,
     ) -> GridSession:
 
         session = GridSession(symbol=symbol, position_side=position_side)
@@ -99,12 +100,16 @@ class GridBuilder:
             else:
                 raise ValueError(f"Unsupported qty_mode: {qty_mode!r}")
 
+            reset_cfg = level_reset_configs[i] if level_reset_configs and i < len(level_reset_configs) else {}
             level = GridLevel(
                 index=i + 1,
                 price=price,
                 qty=qty,
                 position_side=position_side,
                 status="planned",
+                use_reset_tp=reset_cfg.get("use_reset_tp", False),
+                reset_tp_percent=reset_cfg.get("reset_tp_percent"),
+                reset_tp_close_percent=reset_cfg.get("reset_tp_close_percent"),
             )
             session.levels.append(level)
 

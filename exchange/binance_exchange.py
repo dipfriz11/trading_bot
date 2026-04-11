@@ -56,6 +56,13 @@ class BinanceExchange(BaseExchange):
         rounded_price = self._round_price(symbol_info, price, normalized_side)
         return (rounded_qty, rounded_price)
 
+    def normalize_qty(self, symbol: str, qty: float) -> float:
+        return self._round_quantity(self.get_symbol_info(symbol), qty)
+
+    def normalize_price(self, symbol: str, side: str, price: float) -> float:
+        normalized_side = "BUY" if side.upper() in ("BUY", "LONG") else "SELL"
+        return self._round_price(self.get_symbol_info(symbol), price, normalized_side)
+
     # ==============================
     # LEVERAGE
     # ==============================

@@ -35,5 +35,11 @@ class BaseExchange:
     def round_order_params(self, symbol: str, side: str, quantity: float, price: float) -> tuple:
         raise NotImplementedError
 
+    def normalize_qty(self, symbol: str, qty: float) -> float:
+        raise NotImplementedError
+
+    def normalize_price(self, symbol: str, side: str, price: float) -> float:
+        raise NotImplementedError
+
     def close_position(self, symbol: str, side: str, quantity: float) -> dict:
         raise NotImplementedError

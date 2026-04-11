@@ -14,6 +14,7 @@ class GridTrailingWatcher:
         self._last_modified_at: Dict[Tuple[str, str], float] = {}
         self._in_flight: Dict[Tuple[str, str], bool] = {}
         self._lock = threading.Lock()
+        self._last_known_qty: Dict[Tuple[str, str], float] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -46,6 +47,7 @@ class GridTrailingWatcher:
             self._watched.pop(key, None)
             self._last_modified_at.pop(key, None)
             self._in_flight.pop(key, None)
+            self._last_known_qty.pop(key, None)
 
     def stop_all(self) -> None:
         for symbol, position_side in list(self._watched.keys()):
@@ -83,29 +85,118 @@ class GridTrailingWatcher:
                 if key not in self._watched:
                     return
 
+            # ── tick-start snapshot ──────────────────────────────────────
+            session_snap = self._grid_service.get_session(symbol, position_side)
+            if session_snap:
+                by_status = {}
+                for l in session_snap.levels:
+                    by_status.setdefault(l.status, []).append(l.index)
+                print(
+                    f"[GRID-FILL] {symbol}/{position_side}  tick start"
+                    f"  price={price:.8f}"
+                    f"  levels={dict(by_status)}"
+                )
+            # ─────────────────────────────────────────────────────────────
+
             hit = self._grid_service.check_tpsl(symbol, position_side, price)
             if hit is not None:
+                self._last_known_qty.pop(key, None)
                 return
 
-            filled = self._grid_service.check_grid_fills(symbol, position_side)
-            if filled:
-                for lvl in filled:
-                    print(
-                        f"[GridFills] {symbol}/{position_side}"
-                        f"  level[{lvl.index}] filled"
-                        f"  price={lvl.price}"
-                    )
-                mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
-                if mode == "reprice":
-                    updated = self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+            print(f"[GRID-FILL] {symbol}/{position_side}  → calling check_reset_tp_fill")
+            reset_filled = self._grid_service.check_reset_tp_fill(symbol, position_side)
+            print(f"[GRID-FILL] {symbol}/{position_side}  check_reset_tp_fill returned: {reset_filled and reset_filled['order_id']}")
+            if reset_filled:
+                print(
+                    f"[ResetTP] {symbol}/{position_side}"
+                    f"  Reset TP fill detected  order_id={reset_filled['order_id']}"
+                    f"  price={reset_filled['price']:.8f}"
+                    f"  qty={reset_filled['qty']}"
+                )
+                detection_mode = reset_filled.get("detection_mode", "unknown")
+                joint_levels   = reset_filled.get("joint_levels", [])
+                print(
+                    f"[GRID-FILL] {symbol}/{position_side}"
+                    f"  detection_mode={detection_mode}"
+                    f"  joint_levels={[l.index for l in joint_levels]}"
+                )
+                if joint_levels:
+                    for jlvl in joint_levels:
+                        jlvl.status = "filled"
+                        print(
+                            f"[GRID-FILL] {symbol}/{position_side}"
+                            f"  joint level[{jlvl.index}] marked filled"
+                            f"  (will be skipped by check_grid_fills)"
+                        )
+
+                session = self._grid_service.get_session(symbol, position_side)
+                pending = [l for l in (session.levels if session else []) if l.status == "placed"]
+                print(
+                    f"[Rebuild] {symbol}/{position_side}"
+                    f"  called  pending_count={len(pending)}"
+                    f"  pending_indices={[l.index for l in pending]}"
+                )
+                # ── reset decrease policy ────────────────────────────────
+                _pos_at_placement  = reset_filled.get("position_qty_at_placement", 0.0)
+                _reset_tp_qty      = reset_filled["qty"]
+                _curr_qty_rt       = 0.0
+                for _p in self._grid_service.exchange.get_positions(symbol):
+                    if _p["positionSide"] == position_side:
+                        _curr_qty_rt = abs(float(_p["positionAmt"]))
+                        break
+                _actual_decrease   = max(0.0, _pos_at_placement - _curr_qty_rt)
+                _planned_remainder = _pos_at_placement - _reset_tp_qty
+                _tolerance         = _reset_tp_qty * 0.1
+                _is_pure_reset     = abs(_curr_qty_rt - _planned_remainder) <= _tolerance
+                print(
+                    f"[ResetDecrease] {symbol}/{position_side}"
+                    f"  actual_decrease={_actual_decrease:.4f}"
+                    f"  reset_tp_qty={_reset_tp_qty:.4f}"
+                    f"  planned_remainder={_planned_remainder:.4f}"
+                    f"  curr_qty={_curr_qty_rt:.4f}"
+                    f"  is_pure_reset={_is_pure_reset}"
+                )
+
+                if _is_pure_reset:
+                    # Pure reset TP: main TP already correct (set by place_reset_tp_complex)
+                    print(f"[ResetDecrease] {symbol}/{position_side}  pure reset → rebuild only, main TP untouched")
+                    rebuilt = self._grid_service.rebuild_pending_tail(symbol, position_side)
                 else:
-                    updated = self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
-                if updated is not None:
+                    # Reset TP + extra manual close: reprice main TP and SL for new position
+                    print(f"[ResetDecrease] {symbol}/{position_side}  extra decrease → reprice main TP + SL + rebuild")
+                    _mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                    if _mode == "reprice":
+                        self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+                    else:
+                        self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
+                    self._grid_service.update_sl_after_averaging(symbol, position_side)
+                    _cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
+                    _slot_qtys = _cfg.get("slot_qtys", [])
+                    _orders_count = _cfg.get("orders_count", 0)
+                    _target = None
+                    if _slot_qtys and _orders_count:
+                        _rem = _curr_qty_rt
+                        _lvl_in_pos = 0
+                        for _sq in _slot_qtys:
+                            if _rem >= _sq * 0.5:
+                                _rem -= _sq
+                                _lvl_in_pos += 1
+                            else:
+                                break
+                        if _orders_count > _lvl_in_pos:
+                            _target = list(range(_orders_count, _lvl_in_pos, -1))
+                    rebuilt = self._grid_service.rebuild_pending_tail(symbol, position_side, target_slots=_target)
+                    # NOTE: new reset TP for reduced position not placed here — separate step
+                # ────────────────────────────────────────────────────────
+
+                print(f"[GRID-FILL] {symbol}/{position_side}  rebuild_pending_tail returned: {len(rebuilt) if rebuilt else 0} new levels")
+                if rebuilt:
                     print(
-                        f"[GridTP] {symbol}/{position_side}"
-                        f"  TP orders updated after averaging fill ({mode}): {len(updated)} orders"
+                        f"[RebuildTail] {symbol}/{position_side}"
+                        f"  tail rebuilt: {len(rebuilt)} new levels"
                     )
-                self._grid_service.update_sl_after_averaging(symbol, position_side)
+                else:
+                    print(f"[RebuildTail] {symbol}/{position_side}  rebuild skipped")
 
             filled_tps = self._grid_service.check_tp_fills(symbol, position_side)
             if filled_tps:
@@ -117,6 +208,123 @@ class GridTrailingWatcher:
                         f"  price={tp['price']:.8f}"
                         f"  qty={tp['qty']}"
                     )
+
+            print(f"[GRID-FILL] {symbol}/{position_side}  → calling check_grid_fills")
+            filled = self._grid_service.check_grid_fills(symbol, position_side)
+            print(f"[GRID-FILL] {symbol}/{position_side}  check_grid_fills returned: filled_levels={[l.index for l in filled]}")
+            if filled:
+                for lvl in filled:
+                    print(
+                        f"[GridFills] {symbol}/{position_side}"
+                        f"  level[{lvl.index}] filled"
+                        f"  price={lvl.price}"
+                    )
+                print(
+                    f"[FillDbg] {symbol}/{position_side}"
+                    f"  batch=[{', '.join(f'lvl{l.index}/rtp={l.use_reset_tp}' for l in filled)}]"
+                    f"  order_ids={[l.order_id for l in filled]}"
+                )
+                reset_trigger = next(
+                    (lvl for lvl in reversed(filled) if lvl.use_reset_tp), None
+                )
+                print(
+                    f"[FillDbg] {symbol}/{position_side}"
+                    f"  reset_trigger={'lvl'+str(reset_trigger.index) if reset_trigger else None}"
+                    f"  reset_tp_percent={reset_trigger.reset_tp_percent if reset_trigger else '—'}"
+                )
+                if reset_trigger is not None:
+                    print(f"[GRID-FILL] {symbol}/{position_side}  PATH=reset_tp  → calling place_reset_tp_complex level[{reset_trigger.index}]")
+                    self._grid_service.place_reset_tp_complex(symbol, position_side, reset_trigger)
+                    print(f"[GRID-FILL] {symbol}/{position_side}  place_reset_tp_complex done")
+                else:
+                    mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                    print(f"[GRID-FILL] {symbol}/{position_side}  PATH=reprice  mode={mode}  → calling update_grid_tp_orders_{mode}")
+                    if mode == "reprice":
+                        updated = self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+                    else:
+                        updated = self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
+                    print(f"[GRID-FILL] {symbol}/{position_side}  update_grid_tp_orders_{mode} returned: {'None(skip)' if updated is None else str(len(updated))+' order(s)'}")
+                    if updated is not None:
+                        print(
+                            f"[GridTP] {symbol}/{position_side}"
+                            f"  TP orders updated after averaging fill ({mode}): {len(updated)} orders"
+                        )
+                self._grid_service.update_sl_after_averaging(symbol, position_side)
+
+            # ── manual partial close detection ──────────────────────────
+            # Tracked decrease events (reset TP / TP fills): clear tracking;
+            # next tick re-initializes cleanly. No REST needed.
+            # Quiet tick: poll position once, compare with last known.
+            has_pending_reset_tp = bool(
+                self._grid_service._reset_tp_order.get((symbol, position_side))
+            )
+            if filled_tps or has_pending_reset_tp:
+                self._last_known_qty.pop(key, None)
+            elif reset_filled:
+                if _is_pure_reset:
+                    _planned = max(0.0,
+                        reset_filled.get("position_qty_at_placement", 0.0) - reset_filled.get("qty", 0.0))
+                    self._last_known_qty[key] = _planned
+                else:
+                    # extra decrease: actual qty already fetched in reset_filled block above
+                    self._last_known_qty[key] = _curr_qty_rt
+            else:
+                _pos_qty = 0.0
+                for _pos in self._grid_service.exchange.get_positions(symbol):
+                    if _pos["positionSide"] == position_side:
+                        _pos_qty = abs(float(_pos["positionAmt"]))
+                        break
+                _last_qty = self._last_known_qty.get(key)
+                if _last_qty is not None and _pos_qty < _last_qty * 0.99:
+                    print(
+                        f"[ManualClose] {symbol}/{position_side}"
+                        f"  unexplained position decrease"
+                        f"  last={_last_qty}  current={_pos_qty}"
+                    )
+                    _mc_cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
+                    _mc_slot_qtys = _mc_cfg.get("slot_qtys", [])
+                    _mc_orders_count = _mc_cfg.get("orders_count", 0)
+                    _mc_target = None
+                    if _mc_slot_qtys and _mc_orders_count:
+                        _mc_rem = _pos_qty
+                        _mc_lvl_in_pos = 0
+                        for _mc_sq in _mc_slot_qtys:
+                            if _mc_rem >= _mc_sq * 0.5:
+                                _mc_rem -= _mc_sq
+                                _mc_lvl_in_pos += 1
+                            else:
+                                break
+                        if _mc_orders_count > _mc_lvl_in_pos:
+                            _mc_target = list(range(_mc_orders_count, _mc_lvl_in_pos, -1))
+                    self._grid_service.rebuild_pending_tail(symbol, position_side, target_slots=_mc_target)
+                    _mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                    if _mode == "reprice":
+                        self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+                    else:
+                        self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
+                    self._grid_service.update_sl_after_averaging(symbol, position_side)
+                self._last_known_qty[key] = _pos_qty
+
+                # ── auto-stop: position zero, no active orders ───────────
+                if _pos_qty == 0:
+                    _sess      = self._grid_service.get_session(symbol, position_side)
+                    _no_rtp    = not self._grid_service._reset_tp_order.get((symbol, position_side))
+                    _no_placed = not (_sess and any(l.status == "placed" for l in _sess.levels))
+                    if _no_rtp and _no_placed:
+                        print(f"[GridCycle] {symbol}/{position_side}  position=0 no active orders → auto-stop")
+                        _lid = f"grid_trailing_{symbol}_{position_side}"
+                        self._market_data.remove_price_listener(symbol, _lid)
+                        self._market_data.unsubscribe(symbol)
+                        with self._lock:
+                            self._watched.pop(key, None)
+                            self._last_modified_at.pop(key, None)
+                            self._last_known_qty.pop(key, None)
+                        if _sess:
+                            _sess.status = "stopped"
+                            self._grid_service.registry.save_session(_sess)
+                        return
+                # ─────────────────────────────────────────────────────────
+            # ────────────────────────────────────────────────────────────
 
             result = self._grid_service.check_trailing(symbol, position_side, price)
             if result is not None:

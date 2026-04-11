@@ -1563,3 +1563,44 @@ websocket price
 Архитектурный итог:
 Теперь и single orders, и grids поддерживают независимый hedge-mode на одном symbol.
 Это создаёт правильную базу для следующих независимых TP/SL по каждой leg.
+
+2026-04-05 — v0.13.7
+
+Завершён большой блок по grid hedge TP/SL lifecycle.
+
+Что реализовано:
+- Исправлен race в check_grid_fills():
+  - убран преждевременный перевод level.status = "canceled"
+  - averaging fill теперь не теряется, если positionAmt обновился с задержкой
+- Добавлена детекция TP fill через position delta в check_tp_fills():
+  - drag TP к рынку теперь детектируется корректно
+- Полностью закрыт TP lifecycle:
+  - fixed update после averaging
+  - reprice update после averaging
+  - TP fill detection
+  - partial TP fill -> averaging -> remaining TP recalculated
+  - hedge independence / any-order сценарии
+- Добавлен exchange-native grid SL:
+  - foundation через STOP_MARKET algo orders
+  - хранение algoId в _sl_orders
+  - постановка в enable_tpsl()
+  - снятие в disable_tpsl() / stop_session()
+- Реализована перестановка SL после averaging:
+  - LONG
+  - SHORT
+  - hedge independence
+- Пройден полный интеграционный hedge test:
+  - TP + SL вместе
+  - mixed lifecycle
+  - partial TP + averaging
+  - независимость обеих ног
+
+Что подтверждено live-тестами:
+- TP lifecycle для LONG / SHORT
+- exchange-native SL lifecycle для LONG / SHORT
+- hedge independence для TP и SL
+- полный mixed integration scenario TP + SL
+
+Текущее состояние:
+- grid hedge TP/SL lifecycle считается закрытым
+- версия зафиксирована тегом v0.13.7

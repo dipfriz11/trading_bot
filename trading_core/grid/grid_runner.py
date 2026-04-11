@@ -22,6 +22,9 @@ class GridRunner:
             else:
                 raise ValueError(f"Unsupported position_side: {level.position_side!r}")
 
+            level.qty   = self.exchange.normalize_qty(session.symbol, level.qty)
+            level.price = self.exchange.normalize_price(session.symbol, side, level.price)
+
             response = self.exchange.place_limit_order(
                 symbol=session.symbol,
                 side=side,

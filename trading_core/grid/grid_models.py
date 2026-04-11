@@ -17,6 +17,10 @@ class GridLevel:
     status: str = "planned"  # planned | placed | filled | canceled
     order_id: Optional[str] = None
     client_order_id: Optional[str] = None
+    use_reset_tp: bool = False
+    reset_tp_percent: Optional[float] = None
+    reset_tp_close_percent: Optional[float] = None
+    slot_index: Optional[int] = None
 
 
 # =========================
