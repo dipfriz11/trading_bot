@@ -9,6 +9,7 @@ class TpSlConfig:
     sl_percent: float
     tp_percent: Optional[float] = None          # single TP: 3.0 → 3%
     take_profits: Optional[List[dict]] = None   # multi-TP: [{"tp_percent": X}, ...]
+    sl_mode: str = "avg_entry"                  # "avg_entry" | "extreme_order"
 
 
 @dataclass
@@ -104,6 +105,7 @@ class GridService:
                 "last_offset_percent":  last_offset_percent,
                 "distribution_mode":    distribution_mode,
                 "distribution_value":   distribution_value,
+                "level_reset_configs":  level_reset_configs or [],
             }
 
         if use_new_grid_mode:
@@ -400,6 +402,7 @@ class GridService:
         sl_percent: float,
         tp_percent: Optional[float] = None,
         take_profits: Optional[List[dict]] = None,
+        sl_mode: str = "avg_entry",
     ) -> None:
         if tp_percent is None and take_profits is None:
             raise ValueError("enable_tpsl: provide either tp_percent or take_profits")
@@ -426,31 +429,47 @@ class GridService:
             sl_percent=sl_percent,
             tp_percent=tp_percent,
             take_profits=take_profits,
+            sl_mode=sl_mode,
         )
 
-        entry_price: float = 0.0
-        for pos in self.exchange.get_positions(symbol):
-            if pos["positionSide"] == position_side:
-                entry_price = float(pos["entryPrice"])
-                break
-
-        if entry_price > 0:
-            if position_side == "LONG":
-                sl_price = entry_price * (1 - sl_percent / 100)
-            else:
-                sl_price = entry_price * (1 + sl_percent / 100)
-            try:
-                algo_id = self.exchange.place_stop_market_order(symbol, position_side, sl_price)
-                self._sl_orders[(symbol, position_side)] = algo_id
+        if sl_mode == "extreme_order":
+            session = self.registry.get_session(symbol, position_side)
+            placed = [l for l in (session.levels if session else []) if l.status == "placed"]
+            if not placed:
+                print(f"[GridSL] {symbol}/{position_side}  skip SL: no placed levels for extreme_order")
+                return
+            basis = min(l.price for l in placed) if position_side == "LONG" else max(l.price for l in placed)
+            sl_price = basis * (1 - sl_percent / 100) if position_side == "LONG" else basis * (1 + sl_percent / 100)
+            # No position yet — arm virtually; real SL placed after first fill
+            _pos_qty = 0.0
+            for _p in self.exchange.get_positions(symbol):
+                if _p["positionSide"] == position_side:
+                    _pos_qty = abs(float(_p["positionAmt"]))
+                    break
+            if _pos_qty <= 0:
                 print(
-                    f"[GridSL] {symbol}/{position_side}"
-                    f"  SL placed  algoId={algo_id}"
-                    f"  stopPrice={sl_price:.8f}  (entry={entry_price:.8f}, -{sl_percent}%)"
+                    f"[GridSL] {symbol}/{position_side}  extreme_order SL armed virtually"
+                    f"  preview_basis={basis:.8f}  preview_sl={sl_price:.8f}  (no position yet)"
                 )
-            except Exception as e:
-                print(f"[GridSL] {symbol}/{position_side}  failed to place SL: {e}")
+                return
+            sl_basis_label = f"extreme={basis:.8f}"
         else:
-            print(f"[GridSL] {symbol}/{position_side}  skip SL placement: entry_price=0")
+            basis = 0.0
+            for pos in self.exchange.get_positions(symbol):
+                if pos["positionSide"] == position_side:
+                    basis = float(pos["entryPrice"])
+                    break
+            if basis <= 0:
+                print(f"[GridSL] {symbol}/{position_side}  skip SL placement: entry_price=0")
+                return
+            sl_price = basis * (1 - sl_percent / 100) if position_side == "LONG" else basis * (1 + sl_percent / 100)
+            sl_basis_label = f"entry={basis:.8f}"
+        try:
+            algo_id = self.exchange.place_stop_market_order(symbol, position_side, sl_price)
+            self._sl_orders[(symbol, position_side)] = algo_id
+            print(f"[GridSL] {symbol}/{position_side}  SL placed  algoId={algo_id}  stopPrice={sl_price:.8f}  ({sl_basis_label}, -{sl_percent}%)")
+        except Exception as e:
+            print(f"[GridSL] {symbol}/{position_side}  failed to place SL: {e}")
 
     def disable_tpsl(self, symbol: str, position_side: str) -> None:
         algo_id = self._sl_orders.pop((symbol, position_side), None)
@@ -466,6 +485,17 @@ class GridService:
         config = self._tpsl_configs.get((symbol, position_side))
         if config is None:
             return
+        if config.sl_mode == "extreme_order":
+            # First-time placement: if no SL placed yet and position now exists, place at extreme
+            if (symbol, position_side) not in self._sl_orders:
+                _pos_qty = 0.0
+                for _p in self.exchange.get_positions(symbol):
+                    if _p["positionSide"] == position_side:
+                        _pos_qty = abs(float(_p["positionAmt"]))
+                        break
+                if _pos_qty > 0:
+                    self._update_sl_from_extreme(symbol, position_side)
+            return  # extreme_order SL not tied to avg entry after first placement
 
         old_algo_id = self._sl_orders.pop((symbol, position_side), None)
         if old_algo_id is not None:
@@ -500,6 +530,31 @@ class GridService:
             )
         except Exception as e:
             print(f"[GridSL] {symbol}/{position_side}  failed to place new SL after averaging: {e}")
+
+    def _update_sl_from_extreme(self, symbol: str, position_side: str) -> None:
+        config = self._tpsl_configs.get((symbol, position_side))
+        if config is None:
+            return
+        session = self.registry.get_session(symbol, position_side)
+        placed = [l for l in (session.levels if session else []) if l.status == "placed"]
+        if not placed:
+            print(f"[GridSL] {symbol}/{position_side}  skip extreme SL update: no placed levels")
+            return
+        basis = min(l.price for l in placed) if position_side == "LONG" else max(l.price for l in placed)
+        new_sl_price = basis * (1 - config.sl_percent / 100) if position_side == "LONG" else basis * (1 + config.sl_percent / 100)
+        old_algo_id = self._sl_orders.pop((symbol, position_side), None)
+        if old_algo_id is not None:
+            try:
+                self.exchange.cancel_algo_order(old_algo_id)
+                print(f"[GridSL] {symbol}/{position_side}  extreme SL cancelled  algoId={old_algo_id}")
+            except Exception as e:
+                print(f"[GridSL] {symbol}/{position_side}  extreme SL cancel error: {e}")
+        try:
+            new_algo_id = self.exchange.place_stop_market_order(symbol, position_side, new_sl_price)
+            self._sl_orders[(symbol, position_side)] = new_algo_id
+            print(f"[GridSL] {symbol}/{position_side}  extreme SL updated  algoId={new_algo_id}  stopPrice={new_sl_price:.8f}  (extreme={basis:.8f}, -{config.sl_percent}%)")
+        except Exception as e:
+            print(f"[GridSL] {symbol}/{position_side}  extreme SL place error: {e}")
 
     def set_tp_update_mode(self, symbol: str, position_side: str, mode: str) -> None:
         """mode: 'fixed' | 'reprice'"""
@@ -586,14 +641,22 @@ class GridService:
                             f"  (position closed or near-zero, not a fill)"
                         )
                     else:
+                        # Order is confirmed CANCELED on exchange but position hasn't
+                        # reached the fill threshold for this slot. The live order is
+                        # gone. Keeping the level in "placed" would pollute covered_slots
+                        # in rebuild_pending_tail (false coverage — rebuild skips the slot
+                        # but no live order exists). Cleanup-cancel now so the next
+                        # rebuild_pending_tail correctly sees the slot as uncovered and
+                        # re-places it.
+                        level.status = "canceled"
                         _fsf = sum(lvl.qty for lvl in session.levels if lvl.status == "filled")
                         print(
-                            f"[GRID-FILL] {symbol}/{position_side}"
-                            f"  level[{level.index}] CANCELED but position not enough"
+                            f"[GridFills] {symbol}/{position_side}"
+                            f"  level[{level.index}] cleanup cancel"
+                            f"  (CANCELED order, position {current_qty:.4f} < needed {needed:.4f})"
                             f"  order_id={level.order_id}"
-                            f"  current_qty={current_qty}  needed>={needed:.4f}"
                             f"  slot_index={level.slot_index}  filled_so_far={_fsf:.4f}"
-                            f"  → skip, retry next tick"
+                            f"  → slot will be re-placed by next rebuild"
                         )
             except Exception as e:
                 print(f"[GridFills] error checking order {level.order_id}: {e}")
@@ -1099,19 +1162,26 @@ class GridService:
                 f"  target_slots={tail_indices}  (reconcile-driven)"
             )
         elif placed_levels:
-            tail_count   = len(placed_levels)
-            tail_indices = list(range(orders_count, orders_count - tail_count, -1))
+            _rem = position_qty
+            _lvl_in_pos = 0
+            for _sq in slot_qtys:
+                if _rem >= _sq * 0.5:
+                    _rem -= _sq
+                    _lvl_in_pos += 1
+                else:
+                    break
+            tail_indices = list(range(orders_count, _lvl_in_pos, -1))
             print(
                 f"[RebuildV2] {symbol}/{position_side}"
                 f"  position_qty={position_qty}  placed_count={len(placed_levels)}"
-                f"  orders_count={orders_count}  tail={tail_indices}"
+                f"  levels_in_pos={_lvl_in_pos}  orders_count={orders_count}  tail={tail_indices}"
             )
         else:
             # Fallback: derive from position qty when no placed levels exist
             remaining_qty      = position_qty
             levels_in_position = 0
             for sq in slot_qtys:
-                if remaining_qty >= sq * 0.9:
+                if remaining_qty >= sq * 0.5:
                     remaining_qty      -= sq
                     levels_in_position += 1
                 else:
@@ -1123,63 +1193,36 @@ class GridService:
                 f"  orders_count={orders_count}  tail={tail_indices}"
             )
 
-        if not tail_indices:
-            print(f"[RebuildV2] {symbol}/{position_side}  nothing to rebuild -> skip")
-            return None
-
-        # Build full price array for all N slots anchored to current entry
-        if position_side == "LONG":
-            first_price = entry_price * (1 - first_offset_pct / 100)
-            last_price  = entry_price * (1 - last_offset_pct  / 100)
+        # Build desired tail prices (empty dict when tail_indices is empty).
+        # Done before any early return so stale cancel always runs.
+        if tail_indices:
+            if position_side == "LONG":
+                first_price = entry_price * (1 - first_offset_pct / 100)
+                last_price  = entry_price * (1 - last_offset_pct  / 100)
+            else:
+                first_price = entry_price * (1 + first_offset_pct / 100)
+                last_price  = entry_price * (1 + last_offset_pct  / 100)
+            all_prices = (
+                [first_price] if orders_count == 1
+                else self.builder._build_grid_prices(
+                    first_price, last_price, orders_count, distribution_mode, distribution_val
+                )
+            )
+            sorted_tail = sorted(tail_indices)
+            tail_prices = {idx: all_prices[pos] for pos, idx in enumerate(sorted_tail)}
         else:
-            first_price = entry_price * (1 + first_offset_pct / 100)
-            last_price  = entry_price * (1 + last_offset_pct  / 100)
+            all_prices  = []
+            tail_prices = {}
 
-        all_prices = (
-            [first_price] if orders_count == 1
-            else self.builder._build_grid_prices(
-                first_price, last_price, orders_count, distribution_mode, distribution_val
-            )
-        )
-
-        metadata     = self.exchange.get_symbol_metadata(symbol)
-        min_qty      = metadata["min_qty"]
-        min_notional = metadata["min_notional"]
-
-        # Map each tail slot to its target price
-        sorted_tail = sorted(tail_indices)  # ascending: inner slot first → -1%, -2%, ...
-        tail_prices = {idx: all_prices[pos] for pos, idx in enumerate(sorted_tail)}
-
-        # Slots already covered by a still-placed level at the right price (price dedup)
-        covered_slots = {
-            slot_idx
-            for slot_idx, tgt_price in tail_prices.items()
-            for l in session.levels
-            if l.status == "placed" and abs(l.price - tgt_price) / max(tgt_price, 1e-12) < 0.002
-        }
-
-        # Pre-flight: check if the most extreme slot that needs a new order can be placed.
-        # If it cannot, abort before touching anything on the exchange.
-        slots_needing_order = [s for s in tail_indices if s not in covered_slots]
-        if not slots_needing_order:
-            print(f"[RebuildV2] {symbol}/{position_side}  all slots covered -> skip")
-            return None
-        extreme_slot = slots_needing_order[0]
-        pf_qty, pf_price = self.exchange.round_order_params(
-            symbol, position_side, slot_qtys[extreme_slot - 1], tail_prices[extreme_slot]
-        )
-        if pf_qty < min_qty or pf_qty * pf_price < min_notional:
-            print(f"[RebuildV2] {symbol}/{position_side}  extreme slot={extreme_slot}  preflight failed -> abort")
-            return None
-
-        # Cancel only stale placed levels (price doesn't match any target slot)
-        stale_placed = [
-            l for l in placed_levels
-            if not any(
-                abs(l.price - p) / max(p, 1e-12) < 0.002
-                for p in tail_prices.values()
-            )
-        ]
+        # Cancel stale placed levels (not matching any desired tail price).
+        # Runs regardless of whether new orders will be placed.
+        # When tail_prices is empty (tail_indices=[]), all placed levels are stale.
+        stale_placed = []
+        for _sl in placed_levels:
+            _eff = _sl.slot_index if _sl.slot_index is not None else _sl.index
+            _tgt = tail_prices.get(_eff)
+            if _tgt is None or abs(_sl.price - _tgt) / max(_tgt, 1e-12) >= 0.002:
+                stale_placed.append(_sl)
         for level in stale_placed:
             if level.order_id:
                 try:
@@ -1188,6 +1231,47 @@ class GridService:
                 except Exception as e:
                     print(f"[RebuildV2] {symbol}/{position_side}  cancel error level[{level.index}]: {e}")
             level.status = "canceled"
+
+        if not tail_indices:
+            if stale_placed:
+                print(f"[RebuildV2] {symbol}/{position_side}  all slots covered, cancelled {len(stale_placed)} stale levels")
+            else:
+                print(f"[RebuildV2] {symbol}/{position_side}  nothing to rebuild -> skip")
+            return None
+
+        metadata     = self.exchange.get_symbol_metadata(symbol)
+        min_qty      = metadata["min_qty"]
+        min_notional = metadata["min_notional"]
+
+        # Slots already covered by a still-placed level for the same effective slot at the
+        # right price. Uses effective slot (slot_index for rebuilt levels, index for original
+        # levels) so that an original level never accidentally counts as coverage for a
+        # different slot just because its price is coincidentally near that slot's target.
+        covered_slots = set()
+        for _cl in session.levels:
+            if _cl.status != "placed":
+                continue
+            _eff = _cl.slot_index if _cl.slot_index is not None else _cl.index
+            _tgt = tail_prices.get(_eff)
+            if _tgt is not None and abs(_cl.price - _tgt) / max(_tgt, 1e-12) < 0.002:
+                covered_slots.add(_eff)
+
+        # Pre-flight: check if the most extreme slot that needs a new order can be placed.
+        # If it cannot, abort before touching anything on the exchange.
+        slots_needing_order = [s for s in tail_indices if s not in covered_slots]
+        if not slots_needing_order:
+            if stale_placed:
+                print(f"[RebuildV2] {symbol}/{position_side}  target slots covered, cancelled {len(stale_placed)} stale levels")
+            else:
+                print(f"[RebuildV2] {symbol}/{position_side}  all slots covered -> skip")
+            return None
+        extreme_slot = slots_needing_order[0]
+        pf_qty, pf_price = self.exchange.round_order_params(
+            symbol, position_side, slot_qtys[extreme_slot - 1], tail_prices[extreme_slot]
+        )
+        if pf_qty < min_qty or pf_qty * pf_price < min_notional:
+            print(f"[RebuildV2] {symbol}/{position_side}  extreme slot={extreme_slot}  preflight failed -> abort")
+            return None
 
         max_index  = max(l.index for l in session.levels)
         new_levels = []
@@ -1204,6 +1288,8 @@ class GridService:
                 print(f"[RebuildV2] {symbol}/{position_side}  slot={slot_idx}  margin check failed -> stop")
                 break
             max_index += 1
+            _lrc = cfg.get("level_reset_configs", [])
+            _slot_rc = _lrc[slot_idx - 1] if _lrc and slot_idx - 1 < len(_lrc) else {}
             new_level = GridLevel(
                 index=max_index,
                 price=price,
@@ -1211,6 +1297,9 @@ class GridService:
                 position_side=position_side,
                 status="planned",
                 slot_index=slot_idx,
+                use_reset_tp=_slot_rc.get("use_reset_tp", False),
+                reset_tp_percent=_slot_rc.get("reset_tp_percent"),
+                reset_tp_close_percent=_slot_rc.get("reset_tp_close_percent"),
             )
             new_levels.append(new_level)
             session.levels.append(new_level)
@@ -1226,7 +1315,11 @@ class GridService:
         placed_snap = [(l.index, l.order_id) for l in session.levels if l.status == "placed"]
         print(f"[RebuildV2] {symbol}/{position_side}  done  new={len(new_levels)}  active_placed={placed_snap}")
 
-        self.update_sl_after_averaging(symbol, position_side)
+        _sl_cfg = self._tpsl_configs.get((symbol, position_side))
+        if _sl_cfg and _sl_cfg.sl_mode == "extreme_order":
+            self._update_sl_from_extreme(symbol, position_side)
+        else:
+            self.update_sl_after_averaging(symbol, position_side)
         return new_levels
     def place_grid_tp_orders(
         self,
@@ -1577,11 +1670,19 @@ class GridService:
         if basis_price <= 0:
             return None
 
+        # SL basis: avg entry (default) or extreme placed level
+        if config.sl_mode == "extreme_order":
+            _session = self.registry.get_session(symbol, position_side)
+            _placed  = [l for l in (_session.levels if _session else []) if l.status == "placed"]
+            sl_basis = (min(l.price for l in _placed) if position_side == "LONG" else max(l.price for l in _placed)) if _placed else basis_price
+        else:
+            sl_basis = basis_price
+
         # SL — один уровень, всегда
         if position_side == "LONG":
-            sl_hit = price <= basis_price * (1 - config.sl_percent / 100)
+            sl_hit = price <= sl_basis * (1 - config.sl_percent / 100)
         else:
-            sl_hit = price >= basis_price * (1 + config.sl_percent / 100)
+            sl_hit = price >= sl_basis * (1 + config.sl_percent / 100)
 
         # TP — single или multi-level
         if config.take_profits is not None:
