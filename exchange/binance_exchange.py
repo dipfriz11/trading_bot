@@ -10,6 +10,7 @@ class BinanceExchange(BaseExchange):
     def __init__(self):
         self.client = Client(API_KEY, API_SECRET, testnet=False)
         self.client.ping()
+        self._symbol_info_cache: dict = {}
 
         # Binance Futures fees
         self.taker_fee = 0.0005
@@ -33,11 +34,15 @@ class BinanceExchange(BaseExchange):
     # ==============================
 
     def get_symbol_info(self, symbol: str) -> dict:
+        if symbol in self._symbol_info_cache:
+            return self._symbol_info_cache[symbol]
         exchange_info = self.client.futures_exchange_info()
-        return next(
+        info = next(
             s for s in exchange_info["symbols"]
             if s["symbol"] == symbol
         )
+        self._symbol_info_cache[symbol] = info
+        return info
 
     def get_symbol_metadata(self, symbol: str) -> dict:
         symbol_info = self.get_symbol_info(symbol)

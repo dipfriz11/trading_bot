@@ -24,6 +24,8 @@ class TrailingConfig:
     distribution_value: float
     qty_mode: str
     qty_multiplier: float
+    trailing_mode: str = "step"
+    trailing_debounce_percent: float = 0.0
 
 
 class GridService:
@@ -320,6 +322,8 @@ class GridService:
         distribution_value: float = 1.0,
         qty_mode: str = "fixed",
         qty_multiplier: float = 1.0,
+        trailing_mode: str = "step",
+        trailing_debounce_percent: float = 0.0,
     ) -> float:
         if self.registry.get_session(symbol, position_side) is None:
             raise ValueError(f"Session not found for symbol={symbol!r}, position_side={position_side!r}")
@@ -330,8 +334,8 @@ class GridService:
             )
         if position_side not in ("LONG", "SHORT"):
             raise ValueError(f"Unsupported position_side: {position_side!r}")
-        if trailing_step_percent <= 0:
-            raise ValueError(f"trailing_step_percent must be > 0, got {trailing_step_percent}")
+        if trailing_mode == "step" and trailing_step_percent <= 0:
+            raise ValueError(f"trailing_step_percent must be > 0 for step mode, got {trailing_step_percent}")
         if first_offset_percent <= 0:
             raise ValueError(f"first_offset_percent must be > 0, got {first_offset_percent}")
         if last_offset_percent <= 0:
@@ -353,6 +357,8 @@ class GridService:
             distribution_value=distribution_value,
             qty_mode=qty_mode,
             qty_multiplier=qty_multiplier,
+            trailing_mode=trailing_mode,
+            trailing_debounce_percent=trailing_debounce_percent,
         )
         return anchor_price
 
@@ -363,6 +369,35 @@ class GridService:
         if config is None:
             return None
         current_price = price
+
+        if config.trailing_mode == "continuous":
+            debounce = config.trailing_debounce_percent / 100
+            if position_side == "LONG":
+                triggered = current_price > config.anchor_price * (1 + debounce)
+                first_price = current_price * (1 - config.first_offset_percent / 100)
+                last_price  = current_price * (1 - config.last_offset_percent  / 100)
+            else:
+                triggered = current_price < config.anchor_price * (1 - debounce)
+                first_price = current_price * (1 + config.first_offset_percent / 100)
+                last_price  = current_price * (1 + config.last_offset_percent  / 100)
+            if not triggered:
+                return None
+            session = self.modify_session(
+                symbol=symbol,
+                position_side=position_side,
+                total_budget=config.total_budget,
+                orders_count=config.orders_count,
+                first_price=first_price,
+                last_price=last_price,
+                distribution_mode=config.distribution_mode,
+                distribution_value=config.distribution_value,
+                qty_mode=config.qty_mode,
+                qty_multiplier=config.qty_multiplier,
+            )
+            config.anchor_price = current_price
+            return session
+
+        # step mode — без изменений
         if position_side == "LONG":
             triggered = current_price > config.anchor_price * (1 + config.trailing_step_percent / 100)
             first_price = current_price * (1 - config.first_offset_percent / 100)
@@ -576,6 +611,13 @@ class GridService:
                 break
 
         base_qty = self._base_position_qty.get((symbol, position_side), 0.0)
+
+        # Pre-entry fast path: no position and no prior fills → skip get_order loop
+        if current_qty == 0 and base_qty == 0:
+            has_filled = any(l.status == "filled" for l in session.levels)
+            if not has_filled:
+                return []
+
         placed_count = sum(1 for l in session.levels if l.status == "placed")
         filled_count = sum(1 for l in session.levels if l.status == "filled")
         print(
