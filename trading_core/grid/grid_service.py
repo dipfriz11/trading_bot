@@ -45,6 +45,7 @@ class GridService:
         self._reset_tp_order: Dict[Tuple[str, str], dict] = {}
         self._grid_build_config: Dict[Tuple[str, str], dict] = {}
         self._grid_tp_config: Dict[Tuple[str, str], List[dict]] = {}
+        self._symbol_metadata_cache: Dict[str, dict] = {}
 
     def start_session(
         self,
@@ -627,79 +628,48 @@ class GridService:
         )
 
         filled_levels = []
+        open_orders = self.exchange.get_open_orders(symbol)
+        open_ids = {str(o["orderId"]) for o in open_orders}
+
         for level in session.levels:
             if level.status != "placed" or not level.order_id:
                 continue
             try:
-                order = self.exchange.get_order(symbol, int(level.order_id))
-                order_status = order.get("status")
-                print(
-                    f"[ORDER-PAYLOAD] {symbol}/{position_side}  level[{level.index}]"
-                    f"  order_id={level.order_id}  status={order_status}"
-                    f"  side={order.get('side')}  origQty={order.get('origQty')}"
-                    f"  executedQty={order.get('executedQty')}  avgPrice={order.get('avgPrice')}"
-                    f"  cumQuote={order.get('cumQuote')}  updateTime={order.get('updateTime')}"
-                )
-                if order_status == "FILLED":
+                _level_order_id = str(level.order_id)
+                if _level_order_id in open_ids:
+                    print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] still open → skip")
+                    continue
+
+                # order not in open list → closed (filled, canceled, or expired)
+                # position delta as primary signal; get_order() only for ambiguous zone
+                _cfg = self._grid_build_config.get((symbol, position_side))
+                _slot_qtys = _cfg.get("slot_qtys") if _cfg else None
+                if level.slot_index is not None and _slot_qtys:
+                    needed = base_qty + sum(_slot_qtys[0:level.slot_index]) * 0.9
+                else:
+                    filled_so_far = sum(lvl.qty for lvl in session.levels if lvl.status == "filled")
+                    needed = base_qty + filled_so_far + level.qty * 0.9
+
+                if current_qty >= needed:
                     level.status = "filled"
                     filled_levels.append(level)
-                    print(
-                        f"[GRID-FILL] {symbol}/{position_side}"
-                        f"  level[{level.index}] FILLED (order status=FILLED)"
-                        f"  order_id={level.order_id}  price={level.price}"
-                    )
-                elif order_status in ("CANCELED", "EXPIRED"):
-                    # Order was replaced on exchange (e.g. drag on chart = cancel+new).
-                    # Detect fill via position increase: if position grew enough to
-                    # account for this level on top of all already-filled levels.
-                    #
-                    # For rebuilt levels (slot_index set): use slot-based threshold so
-                    # historical fills from previous Reset TP cycles don't inflate needed.
-                    # For original levels (slot_index=None): legacy filled_so_far logic.
-                    _cfg = self._grid_build_config.get((symbol, position_side))
-                    _slot_qtys = _cfg.get("slot_qtys") if _cfg else None
-                    if level.slot_index is not None and _slot_qtys:
-                        needed = base_qty + sum(_slot_qtys[0:level.slot_index]) * 0.9
-                    else:
-                        filled_so_far = sum(
-                            lvl.qty for lvl in session.levels if lvl.status == "filled"
-                        )
-                        needed = base_qty + filled_so_far + level.qty * 0.9
-                    if current_qty >= needed:
+                    print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED via bulk+position delta  order_id={_level_order_id}  current_qty={current_qty}  needed={needed:.4f}")
+                elif current_qty < level.qty * 0.5:
+                    level.status = "canceled"
+                    print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] cleanup cancel  current_qty={current_qty} < {level.qty * 0.5:.4f}  (position closed or near-zero, not a fill)")
+                else:
+                    # ambiguous zone: order closed, position delta inconclusive → fallback get_order()
+                    order = self.exchange.get_order(symbol, int(_level_order_id))
+                    order_status = order.get("status")
+                    print(f"[ORDER-PAYLOAD] {symbol}/{position_side}  level[{level.index}]  order_id={_level_order_id}  status={order_status}  side={order.get('side')}  origQty={order.get('origQty')}  executedQty={order.get('executedQty')}  avgPrice={order.get('avgPrice')}  cumQuote={order.get('cumQuote')}  updateTime={order.get('updateTime')}  (fallback)")
+                    if order_status == "FILLED":
                         level.status = "filled"
                         filled_levels.append(level)
-                        print(
-                            f"[GridFills] {symbol}/{position_side}"
-                            f"  level[{level.index}] detected via position delta"
-                            f"  (order CANCELED, position {current_qty} >= {needed:.4f})"
-                        )
-                    elif current_qty < level.qty * 0.5:
-                        # Position too small to contain this fill — cleanup cancel, no retry.
-                        level.status = "canceled"
-                        print(
-                            f"[GridFills] {symbol}/{position_side}"
-                            f"  level[{level.index}] cleanup cancel"
-                            f"  current_qty={current_qty} < {level.qty * 0.5:.4f}"
-                            f"  (position closed or near-zero, not a fill)"
-                        )
+                        print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED (fallback get_order)  order_id={_level_order_id}  price={level.price}")
                     else:
-                        # Order is confirmed CANCELED on exchange but position hasn't
-                        # reached the fill threshold for this slot. The live order is
-                        # gone. Keeping the level in "placed" would pollute covered_slots
-                        # in rebuild_pending_tail (false coverage — rebuild skips the slot
-                        # but no live order exists). Cleanup-cancel now so the next
-                        # rebuild_pending_tail correctly sees the slot as uncovered and
-                        # re-places it.
                         level.status = "canceled"
                         _fsf = sum(lvl.qty for lvl in session.levels if lvl.status == "filled")
-                        print(
-                            f"[GridFills] {symbol}/{position_side}"
-                            f"  level[{level.index}] cleanup cancel"
-                            f"  (CANCELED order, position {current_qty:.4f} < needed {needed:.4f})"
-                            f"  order_id={level.order_id}"
-                            f"  slot_index={level.slot_index}  filled_so_far={_fsf:.4f}"
-                            f"  → slot will be re-placed by next rebuild"
-                        )
+                        print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] cleanup cancel  (fallback: status={order_status}, position {current_qty:.4f} < needed {needed:.4f})  order_id={_level_order_id}  slot_index={level.slot_index}  filled_so_far={_fsf:.4f}  → slot will be re-placed by next rebuild")
             except Exception as e:
                 print(f"[GridFills] error checking order {level.order_id}: {e}")
 
@@ -1303,7 +1273,10 @@ class GridService:
                 print(f"[RebuildV2] {symbol}/{position_side}  nothing to rebuild -> skip")
             return None
 
-        metadata     = self.exchange.get_symbol_metadata(symbol)
+        metadata = self._symbol_metadata_cache.get(symbol)
+        if metadata is None:
+            metadata = self.exchange.get_symbol_metadata(symbol)
+            self._symbol_metadata_cache[symbol] = metadata
         min_qty      = metadata["min_qty"]
         min_notional = metadata["min_notional"]
 
@@ -1630,7 +1603,10 @@ class GridService:
             except Exception as e:
                 print(f"[GridTP] cancel error order_id={tp['order_id']}: {e}")
 
-        metadata   = self.exchange.get_symbol_metadata(symbol)
+        metadata = self._symbol_metadata_cache.get(symbol)
+        if metadata is None:
+            metadata = self.exchange.get_symbol_metadata(symbol)
+            self._symbol_metadata_cache[symbol] = metadata
         step       = Decimal(str(metadata["step_size"]))
         qty_dec    = Decimal(str(position_qty))
         close_side = "SELL" if position_side == "LONG" else "BUY"

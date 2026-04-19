@@ -386,7 +386,10 @@ class BinanceExchange(BaseExchange):
             symbol=symbol,
             orderId=order_id
         )
-    
+
+    def get_open_orders(self, symbol: str) -> list:
+        return self.client.futures_get_open_orders(symbol=symbol)
+
     def calculate_fee(self, order_type: str, notional: float) -> float:
         """
         order_type: "MARKET" or "LIMIT"

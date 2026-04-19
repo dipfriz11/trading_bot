@@ -160,7 +160,28 @@ class GridTrailingWatcher:
                 if _is_pure_reset:
                     # Pure reset TP: main TP already correct (set by place_reset_tp_complex)
                     print(f"[ResetDecrease] {symbol}/{position_side}  pure reset → rebuild only, main TP untouched")
-                    rebuilt = self._grid_service.rebuild_pending_tail(symbol, position_side)
+                    _rtp_count = reset_filled.get("target_rebuild_count")
+                    _pr_cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
+                    _pr_sq  = _pr_cfg.get("slot_qtys", [])
+                    _pr_oc  = _pr_cfg.get("orders_count", 0)
+                    _pr_target = None
+                    if _rtp_count is not None and _pr_sq and _pr_oc:
+                        _pr_rem, _pr_lip = _curr_qty_rt, 0
+                        for _pr_s in _pr_sq:
+                            if _pr_rem >= _pr_s * 0.5:
+                                _pr_rem -= _pr_s; _pr_lip += 1
+                            else:
+                                break
+                        _pr_full = list(range(_pr_oc, _pr_lip, -1))
+                        _freed, _freed_rem = 0, reset_filled.get("qty", 0.0)
+                        for _pr_s in _pr_sq:
+                            if _freed_rem >= _pr_s * 0.9:
+                                _freed_rem -= _pr_s; _freed += 1
+                            else:
+                                break
+                        _pr_target = _pr_full[:len(pending) + _freed]
+                        print(f"[ResetDecrease] {symbol}/{position_side}  target_slots={_pr_target}  pending={len(pending)}  freed_slots={_freed}  lvl_in_pos={_pr_lip}")
+                    rebuilt = self._grid_service.rebuild_pending_tail(symbol, position_side, target_slots=_pr_target)
                 else:
                     # Reset TP + extra manual close: reprice main TP and SL for new position
                     print(f"[ResetDecrease] {symbol}/{position_side}  extra decrease → reprice main TP + SL + rebuild")
@@ -417,6 +438,17 @@ class GridTrailingWatcher:
                                     if _mf_candidate:
                                         print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: reset TP missing → reconcile level[{_mf_candidate.index}]  slot={(_mf_candidate.slot_index if _mf_candidate.slot_index is not None else _mf_candidate.index)}  covered_slots={_mf_lvl_in_pos}")
                                         self._grid_service.place_reset_tp_complex(symbol, position_side, _mf_candidate)
+                            # TP/SL reconcile: position grew via drag fill, normal fill-path skipped.
+                            # Only if no active reset TP — place_reset_tp_complex already reprices main TP.
+                            _mf_rtp_now = self._grid_service._reset_tp_order.get((symbol, position_side))
+                            if not _mf_rtp_now:
+                                _mf_mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                                if _mf_mode == "reprice":
+                                    self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
+                                else:
+                                    self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
+                                self._grid_service.update_sl_after_averaging(symbol, position_side)
+                                print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: TP+SL repriced after drag fill")
                         else:
                             print(
                                 f"[ManualAdd] {symbol}/{position_side}"

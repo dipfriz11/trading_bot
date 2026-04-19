@@ -1641,3 +1641,41 @@ websocket price
 - Фикс сделан узко и не меняет основную классификацию в `check_grid_fills()`
 - Heavy-path ManualAdd под `_matches_fill` по-прежнему не запускается
 - Отдельно на будущее можно подумать, нужно ли раньше восстанавливать canceled-слоты после reconcile, не ломая защиту от API-lag
+
+## 2026-04-19 — bulk fill path + TP/SL reconcile after drag + pure reset tail fix
+
+### Что сделано
+- В `check_grid_fills()` внедрён hybrid bulk-path:
+  - один `get_open_orders(symbol)` вместо серии `get_order()` для open-levels
+  - `get_order()` оставлен только для ambiguous fallback
+- Это убрало лишние последовательные REST-вызовы в fill-detection path
+
+- В `_do_check()` добавлен узкий reconcile для `_matches_fill`:
+  - если позиция выросла через drag/cancel+new и normal fill-path не сработал,
+    теперь пересчитываются `main TP` и `SL`
+  - rebuild/full ManualAdd из этой ветки не запускаются
+
+- В pure-reset branch исправлена логика rebuild хвоста:
+  - `target_rebuild_count` больше не используется как число новых ордеров
+  - база теперь — `len(pending)` на момент rebuild
+  - `freed_slots` считается отдельно из `reset_filled["qty"]`
+  - для `freed_slots` используется порог `0.9`
+  - `levels_in_pos` логика с `0.5` не трогалась
+  - rebuild получает `target_slots` без раздувания хвоста
+
+### Что подтверждено live
+- `TP/SL` после drag/cancel+new теперь пересчитываются корректно
+- pure reset rebuild больше не ставит лишний pending order
+- кейс:
+  - 1 existing pending + 1 freed slot
+  - теперь даёт 2 pending total, а не 3
+- bulk/hybrid fill path работает:
+  - `still open -> skip`
+  - `FILLED via bulk+position delta`
+  - fallback `get_order()` остаётся только для ambiguous кейсов
+
+### Примечания
+- Пороги `0.5` и `0.9` разведены по смыслу:
+  - `0.9` — detection / freed full-slot counting
+  - `0.5` — structural `levels_in_pos`
+- Все изменения сделаны локально, без большого рефакторинга
