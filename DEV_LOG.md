@@ -1604,3 +1604,40 @@ websocket price
 Текущее состояние:
 - grid hedge TP/SL lifecycle считается закрытым
 - версия зафиксирована тегом v0.13.7
+
+## 2026-04-19 — фикс reset TP при _matches_fill + modify в rebuild хвоста
+
+### Что сделано
+- Добавлен точечный reconcile reset TP в `grid_trailing_watcher._do_check()` для кейса `_matches_fill=True`
+- При `_matches_fill` heavy-path ManualAdd по-прежнему пропускается, как и раньше
+- Если в этом режиме reset TP отсутствует, теперь он безопасно восстанавливается через существующий `place_reset_tp_complex()`
+- За счёт этого устранён кейс, когда после увеличения позиции reset TP мог потеряться из-за API-lag / cancel+new сценария на бирже
+
+- В `grid_service.rebuild_pending_tail()` добавлен hybrid-path для modify
+- stale-уровни хвоста теперь делятся на:
+  - `stale_cancel` — слот больше не нужен в хвосте, делаем cancel
+  - `stale_modify` — слот тот же, изменилась только цена, сначала пробуем modify
+- Если modify не проходит, остаётся безопасный fallback: `cancel + new`
+- Логика covered slots сохранена, дубли planned-уровней не создаются
+
+### Что подтверждено live
+- Воспроизведён проблемный сценарий, где позиция увеличивалась, но normal averaging flow не завершался из-за `_matches_fill`
+- Раньше в этом кейсе reset TP мог не разместиться
+- После фикса в логах подтверждено:
+  - `_matches_fill: reset TP missing → reconcile`
+  - reset TP успешно размещается
+  - main TP успешно пересоздаётся
+- Такой же сценарий подтверждён повторно ещё раз
+- После срабатывания reset TP rebuild хвоста теперь показывает живой `modified stale slot[...]`
+- Существенных регрессий по:
+  - reset TP
+  - main TP
+  - SL
+  - rebuild после reset TP
+  - консистентности хвоста
+  не обнаружено
+
+### Примечания
+- Фикс сделан узко и не меняет основную классификацию в `check_grid_fills()`
+- Heavy-path ManualAdd под `_matches_fill` по-прежнему не запускается
+- Отдельно на будущее можно подумать, нужно ли раньше восстанавливать canceled-слоты после reconcile, не ломая защиту от API-lag

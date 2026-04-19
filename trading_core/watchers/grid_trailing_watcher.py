@@ -390,11 +390,33 @@ class GridTrailingWatcher:
                             for q in _placed_qtys
                         )
                         if _matches_fill:
-                            print(
-                                f"[ManualAdd] {symbol}/{position_side}"
-                                f"  skipped: delta={_delta:.4f} matches placed level qty"
-                                f"  → likely API-lag fill, next tick will detect"
-                            )
+                            print(f"[ManualAdd] {symbol}/{position_side}  skipped: delta={_delta:.4f} matches placed level qty  → likely API-lag fill, next tick will detect")
+                            _mf_rtp = self._grid_service._reset_tp_order.get((symbol, position_side))
+                            if not _mf_rtp:
+                                _mf_cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
+                                _mf_slot_qtys = _mf_cfg.get("slot_qtys", [])
+                                _mf_lvl_in_pos = 0
+                                _mf_rem = _pos_qty
+                                for _mf_sq in _mf_slot_qtys:
+                                    if _mf_rem >= _mf_sq * 0.5:
+                                        _mf_rem -= _mf_sq
+                                        _mf_lvl_in_pos += 1
+                                    else:
+                                        break
+                                if _mf_lvl_in_pos > 0:
+                                    _mf_sess = self._grid_service.get_session(symbol, position_side)
+                                    _mf_candidate = next(
+                                        (l for l in sorted(
+                                            (_mf_sess.levels if _mf_sess else []),
+                                            key=lambda x: (x.slot_index if x.slot_index is not None else x.index),
+                                            reverse=True
+                                        ) if l.use_reset_tp
+                                           and (l.slot_index if l.slot_index is not None else l.index) <= _mf_lvl_in_pos),
+                                        None
+                                    )
+                                    if _mf_candidate:
+                                        print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: reset TP missing → reconcile level[{_mf_candidate.index}]  slot={(_mf_candidate.slot_index if _mf_candidate.slot_index is not None else _mf_candidate.index)}  covered_slots={_mf_lvl_in_pos}")
+                                        self._grid_service.place_reset_tp_complex(symbol, position_side, _mf_candidate)
                         else:
                             print(
                                 f"[ManualAdd] {symbol}/{position_side}"

@@ -1259,24 +1259,46 @@ class GridService:
         # Cancel stale placed levels (not matching any desired tail price).
         # Runs regardless of whether new orders will be placed.
         # When tail_prices is empty (tail_indices=[]), all placed levels are stale.
-        stale_placed = []
+        stale_cancel = []  # slot dropped from tail → cancel only
+        stale_modify = []  # slot stays, price drifted → try modify first
         for _sl in placed_levels:
             _eff = _sl.slot_index if _sl.slot_index is not None else _sl.index
             _tgt = tail_prices.get(_eff)
-            if _tgt is None or abs(_sl.price - _tgt) / max(_tgt, 1e-12) >= 0.002:
-                stale_placed.append(_sl)
-        for level in stale_placed:
+            if _tgt is None:
+                stale_cancel.append(_sl)
+            elif abs(_sl.price - _tgt) / max(_tgt, 1e-12) >= 0.002:
+                stale_modify.append((_sl, _tgt))
+
+        for level in stale_cancel:
             if level.order_id:
                 try:
                     self.exchange.cancel_order(symbol, level.order_id)
-                    print(f"[RebuildV2] {symbol}/{position_side}  cancelled stale level[{level.index}]")
+                    print(f"[RebuildV2] {symbol}/{position_side}  cancelled stale slot[{level.slot_index if level.slot_index is not None else level.index}]")
                 except Exception as e:
                     print(f"[RebuildV2] {symbol}/{position_side}  cancel error level[{level.index}]: {e}")
             level.status = "canceled"
 
+        _mod_side = "BUY" if position_side == "LONG" else "SELL"
+        for level, tgt_price in stale_modify:
+            if level.order_id:
+                try:
+                    self.exchange.modify_order(symbol, int(level.order_id), _mod_side, level.qty, tgt_price, position_side)
+                    level.price = tgt_price
+                    print(f"[RebuildV2] {symbol}/{position_side}  modified stale slot[{level.slot_index if level.slot_index is not None else level.index}]  new_price={tgt_price:.8f}")
+                except Exception as e:
+                    print(f"[RebuildV2] {symbol}/{position_side}  modify fallback cancel+new slot[{level.slot_index if level.slot_index is not None else level.index}]: {e}")
+                    try:
+                        self.exchange.cancel_order(symbol, level.order_id)
+                    except Exception as ce:
+                        print(f"[RebuildV2] {symbol}/{position_side}  cancel error in fallback level[{level.index}]: {ce}")
+                    level.status = "canceled"
+            else:
+                print(f"[RebuildV2] {symbol}/{position_side}  modify skipped slot[{level.slot_index if level.slot_index is not None else level.index}]  no order_id → cancel+new")
+                level.status = "canceled"
+
         if not tail_indices:
-            if stale_placed:
-                print(f"[RebuildV2] {symbol}/{position_side}  all slots covered, cancelled {len(stale_placed)} stale levels")
+            if stale_cancel or stale_modify:
+                print(f"[RebuildV2] {symbol}/{position_side}  all slots covered, processed stale: cancel={len(stale_cancel)} modify={len(stale_modify)}")
             else:
                 print(f"[RebuildV2] {symbol}/{position_side}  nothing to rebuild -> skip")
             return None
@@ -1302,8 +1324,8 @@ class GridService:
         # If it cannot, abort before touching anything on the exchange.
         slots_needing_order = [s for s in tail_indices if s not in covered_slots]
         if not slots_needing_order:
-            if stale_placed:
-                print(f"[RebuildV2] {symbol}/{position_side}  target slots covered, cancelled {len(stale_placed)} stale levels")
+            if stale_cancel or stale_modify:
+                print(f"[RebuildV2] {symbol}/{position_side}  target slots covered, processed stale: cancel={len(stale_cancel)} modify={len(stale_modify)}")
             else:
                 print(f"[RebuildV2] {symbol}/{position_side}  all slots covered -> skip")
             return None
