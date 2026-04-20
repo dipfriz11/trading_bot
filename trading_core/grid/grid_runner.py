@@ -66,17 +66,19 @@ class GridRunner:
             else:
                 raise ValueError(f"Unsupported position_side: {level.position_side!r}")
 
-            response = self.exchange.modify_order(
-                symbol=session.symbol,
-                order_id=int(level.order_id),
-                side=side,
-                quantity=new_level.qty,
-                price=new_level.price,
-                position_side=level.position_side,
-            )
-
-            level.price = new_level.price
-            level.qty = new_level.qty
-            level.client_order_id = response.get("clientOrderId", level.client_order_id)
+            try:
+                response = self.exchange.modify_order(
+                    symbol=session.symbol,
+                    order_id=int(level.order_id),
+                    side=side,
+                    quantity=new_level.qty,
+                    price=new_level.price,
+                    position_side=level.position_side,
+                )
+                level.price = new_level.price
+                level.qty = new_level.qty
+                level.client_order_id = response.get("clientOrderId", level.client_order_id)
+            except Exception as _e:
+                print(f"[GridRunner] modify_session_orders: level[{level.index}] modify_order error (reconcile next tick): {_e}")
 
         return session

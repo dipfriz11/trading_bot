@@ -1679,3 +1679,42 @@ websocket price
   - `0.9` — detection / freed full-slot counting
   - `0.5` — structural `levels_in_pos`
 - Все изменения сделаны локально, без большого рефакторинга
+
+## 2026-04-20 — hedge live stabilization: active reset TP growth reconcile + watcher safety fixes
+
+### Что сделано
+- Закрыт branch gap в `grid_trailing_watcher.py` для сценария:
+  позиция выросла, пока reset TP ещё активен.
+- Добавлена отдельная ветка reconcile для случая:
+  `current position > position_qty_at_placement * 1.01`
+- В этом сценарии теперь:
+  - старый reset TP отменяется как stale
+  - ставится новый reset TP для более глубокой позиции
+  - main TP пересобирается через `place_reset_tp_complex`
+  - SL обновляется под новую позицию
+- Ранее в этом кейсе watcher просто выходил без reconcile, из-за чего после 4-го усреднения
+  reset TP / main TP / SL оставались неактуальными.
+
+### Дополнительно
+- Укреплён watcher path против `APIError -2013` при modify/cancel:
+  тик больше не должен падать целиком из-за гонки по уже исполненному/отменённому ордеру.
+- В `_matches_fill` path вынесено обновление SL так, чтобы оно не пропускалось,
+  если main TP уже был обновлён через `place_reset_tp_complex`.
+- В pure reset path `_last_known_qty` теперь синхронизируется по фактической позиции с биржи,
+  а не по расчётному `_planned`, чтобы не провоцировать ложный повторный reconcile.
+
+### Что подтверждено live
+Пройдены live-тесты:
+- `test_grid_freeform_short_trailing_live.py`
+- `test_grid_freeform_hedge_trailing_live.py`
+
+Подтверждено:
+- LONG и SHORT ноги в hedge-режиме работают независимо
+- reset TP / main TP / SL корректно обновляются после роста позиции при активном reset TP
+- pure reset + rebuild отрабатывают без падения watcher
+- после reset fill хвост пересобирается и цикл продолжается
+- deep hedge path с последовательными усреднениями и reset TP проходит существенно стабильнее
+
+### Наблюдение
+- После cleanup cancel глубинных rebuilt-уровней всё ещё может включаться `_matches_fill` fallback path,
+  но теперь он приводит систему в корректное состояние и не блокирует цикл.

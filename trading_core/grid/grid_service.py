@@ -286,7 +286,10 @@ class GridService:
             return None
         for level in session.levels:
             if level.order_id and level.status == "placed":
-                self.exchange.cancel_order(session.symbol, level.order_id)
+                try:
+                    self.exchange.cancel_order(session.symbol, level.order_id)
+                except Exception as _e:
+                    print(f"[GridStop] {symbol}/{position_side}  cancel_order level[{level.index}] error (ignored): {_e}")
                 level.status = "canceled"
         sl_algo_id = self._sl_orders.pop((symbol, position_side), None)
         if sl_algo_id is not None:
