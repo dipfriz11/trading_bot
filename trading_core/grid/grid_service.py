@@ -46,6 +46,7 @@ class GridService:
         self._grid_build_config: Dict[Tuple[str, str], dict] = {}
         self._grid_tp_config: Dict[Tuple[str, str], List[dict]] = {}
         self._symbol_metadata_cache: Dict[str, dict] = {}
+        self._rebuilt_order_ids: Dict[Tuple[str, str], dict] = {}
 
     def start_session(
         self,
@@ -647,8 +648,9 @@ class GridService:
                 # position delta as primary signal; get_order() only for ambiguous zone
                 _cfg = self._grid_build_config.get((symbol, position_side))
                 _slot_qtys = _cfg.get("slot_qtys") if _cfg else None
-                if level.slot_index is not None and _slot_qtys:
-                    needed = base_qty + sum(_slot_qtys[0:level.slot_index]) * 0.9
+                if _slot_qtys and (level.slot_index is not None or level.index <= len(_slot_qtys)):
+                    _eff_slot = level.slot_index if level.slot_index is not None else level.index
+                    needed = base_qty + sum(_slot_qtys[0:_eff_slot]) * 0.9
                 else:
                     filled_so_far = sum(lvl.qty for lvl in session.levels if lvl.status == "filled")
                     needed = base_qty + filled_so_far + level.qty * 0.9
@@ -670,9 +672,45 @@ class GridService:
                         filled_levels.append(level)
                         print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED (fallback get_order)  order_id={_level_order_id}  price={level.price}")
                     else:
-                        level.status = "canceled"
                         _fsf = sum(lvl.qty for lvl in session.levels if lvl.status == "filled")
-                        print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] cleanup cancel  (fallback: status={order_status}, position {current_qty:.4f} < needed {needed:.4f})  order_id={_level_order_id}  slot_index={level.slot_index}  filled_so_far={_fsf:.4f}  → slot will be re-placed by next rebuild")
+                        _local_needed = base_qty + _fsf + level.qty * 0.85
+                        if current_qty >= _local_needed:
+                            level.status = "filled"
+                            filled_levels.append(level)
+                            print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED via ghost-fill detection  order_id={_level_order_id}  status={order_status}  current_qty={current_qty}  local_needed={_local_needed:.4f}")
+                        else:
+                            _eff_slot_fb = level.slot_index if level.slot_index is not None else level.index
+                            if _slot_qtys and 1 <= _eff_slot_fb <= len(_slot_qtys):
+                                _half_needed = base_qty + sum(_slot_qtys[:_eff_slot_fb - 1]) + _slot_qtys[_eff_slot_fb - 1] * 0.5
+                                if current_qty >= _half_needed:
+                                    level.status = "filled"
+                                    filled_levels.append(level)
+                                    print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED via 0.5-threshold ghost-fill  order_id={_level_order_id}  status={order_status}  current_qty={current_qty}  half_needed={_half_needed:.4f}")
+                                    continue
+                            _roi = self._rebuilt_order_ids.get((symbol, position_side), {})
+                            _rebuilt_meta = _roi.get(_level_order_id) if isinstance(_roi, dict) else None
+                            if isinstance(_rebuilt_meta, dict):
+                                _rebuilt_floor = _rebuilt_meta.get("floor")
+                                _rechecks_left = _rebuilt_meta.get("rechecks_left", 0)
+                            else:
+                                _rebuilt_floor = _rebuilt_meta
+                                _rechecks_left = 0
+                            if _rebuilt_floor is not None:
+                                if current_qty >= _rebuilt_floor:
+                                    _roi.pop(_level_order_id, None)
+                                    level.status = "filled"
+                                    filled_levels.append(level)
+                                    print(f"[GRID-FILL] {symbol}/{position_side}  level[{level.index}] FILLED via rebuilt-floor  order_id={_level_order_id}  status={order_status}  current_qty={current_qty}  rebuilt_floor={_rebuilt_floor:.4f}")
+                                    continue
+                                if _rechecks_left > 0:
+                                    _rebuilt_meta["rechecks_left"] = _rechecks_left - 1
+                                    print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] skip cleanup cancel (freshly rebuilt order, rechecks_left={_rechecks_left - 1}) → recheck next tick")
+                                    continue
+                                _roi.pop(_level_order_id, None)
+                                print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] skip cleanup cancel (freshly rebuilt order) → recheck next tick")
+                                continue
+                            level.status = "canceled"
+                            print(f"[GridFills] {symbol}/{position_side}  level[{level.index}] cleanup cancel  (fallback: status={order_status}, position {current_qty:.4f} < needed {needed:.4f}, local_needed={_local_needed:.4f})  order_id={_level_order_id}  slot_index={level.slot_index}  filled_so_far={_fsf:.4f}  → slot will be re-placed by next rebuild")
             except Exception as e:
                 print(f"[GridFills] error checking order {level.order_id}: {e}")
 
@@ -990,13 +1028,17 @@ class GridService:
             reset_tp_price = entry_price * (1 - filled_level.reset_tp_percent / 100)
 
         # place Reset TP
-        reset_response = self.exchange.place_limit_order(
-            symbol=symbol,
-            side=close_side,
-            quantity=reset_qty,
-            price=reset_tp_price,
-            position_side=position_side,
-        )
+        try:
+            reset_response = self.exchange.place_limit_order(
+                symbol=symbol,
+                side=close_side,
+                quantity=reset_qty,
+                price=reset_tp_price,
+                position_side=position_side,
+            )
+        except Exception as _e:
+            print(f"[ResetTP] {symbol}/{position_side}  reset TP placement failed (main TP already cancelled): {_e}")
+            return None
         reset_entry = {
             "order_id":                  int(reset_response["orderId"]),
             "reset_tp_percent":          filled_level.reset_tp_percent,
@@ -1005,6 +1047,7 @@ class GridService:
             "qty":                       reset_qty,
             "position_qty_at_placement": position_qty,
             "target_rebuild_count":      target_rebuild_count,
+            "trigger_slot":              filled_level.slot_index if filled_level.slot_index is not None else filled_level.index,
         }
         self._reset_tp_order[(symbol, position_side)] = reset_entry
         print(
@@ -1040,13 +1083,17 @@ class GridService:
         else:
             main_tp_price = entry_price * (1 - main_tp_pct / 100)
 
-        main_response = self.exchange.place_limit_order(
-            symbol=symbol,
-            side=close_side,
-            quantity=main_qty,
-            price=main_tp_price,
-            position_side=position_side,
-        )
+        try:
+            main_response = self.exchange.place_limit_order(
+                symbol=symbol,
+                side=close_side,
+                quantity=main_qty,
+                price=main_tp_price,
+                position_side=position_side,
+            )
+        except Exception as _e:
+            print(f"[ResetTP] {symbol}/{position_side}  main TP placement failed (reset TP active, main TP missing): {_e}")
+            return {"reset_tp": reset_entry, "main_tp": None}
         main_entry = {
             "order_id":      int(main_response["orderId"]),
             "tp_percent":    main_tp_pct,
@@ -1229,6 +1276,12 @@ class GridService:
             all_prices  = []
             tail_prices = {}
 
+        rebuilt_fill_floors = {}
+        _floor_qty = position_qty
+        for _slot_idx in sorted(tail_indices):
+            rebuilt_fill_floors[_slot_idx] = _floor_qty + slot_qtys[_slot_idx - 1] * 0.5
+            _floor_qty += slot_qtys[_slot_idx - 1]
+
         # Cancel stale placed levels (not matching any desired tail price).
         # Runs regardless of whether new orders will be placed.
         # When tail_prices is empty (tail_indices=[]), all placed levels are stale.
@@ -1258,6 +1311,12 @@ class GridService:
                     self.exchange.modify_order(symbol, int(level.order_id), _mod_side, level.qty, tgt_price, position_side)
                     level.price = tgt_price
                     print(f"[RebuildV2] {symbol}/{position_side}  modified stale slot[{level.slot_index if level.slot_index is not None else level.index}]  new_price={tgt_price:.8f}")
+                    _eff = level.slot_index if level.slot_index is not None else level.index
+                    if _eff in rebuilt_fill_floors:
+                        self._rebuilt_order_ids.setdefault((symbol, position_side), {})[str(level.order_id)] = {
+                            "floor": rebuilt_fill_floors[_eff],
+                            "rechecks_left": 1,
+                        }
                 except Exception as e:
                     print(f"[RebuildV2] {symbol}/{position_side}  modify fallback cancel+new slot[{level.slot_index if level.slot_index is not None else level.index}]: {e}")
                     try:
@@ -1327,6 +1386,30 @@ class GridService:
             if r_qty < min_qty or r_qty * r_price < min_notional:
                 print(f"[RebuildV2] {symbol}/{position_side}  slot={slot_idx}  margin check failed -> stop")
                 break
+            _reuse_pool = sorted(
+                [l for l in session.levels
+                 if (l.slot_index == slot_idx or (l.slot_index is None and l.index == slot_idx))
+                 and l.status in ("filled", "canceled")],
+                key=lambda l: 0 if l.slot_index == slot_idx else 1,
+            )
+            if _reuse_pool:
+                _rl = _reuse_pool[0]
+                for _dup in _reuse_pool[1:]:
+                    _dup.status = "canceled"
+                _lrc_r = cfg.get("level_reset_configs", [])
+                _src_r = _lrc_r[slot_idx - 1] if _lrc_r and slot_idx - 1 < len(_lrc_r) else {}
+                _rl.price  = price
+                _rl.qty    = slot_qty
+                _rl.status = "planned"
+                _rl.order_id        = None
+                _rl.client_order_id = None
+                _rl.slot_index      = slot_idx
+                _rl.use_reset_tp              = _src_r.get("use_reset_tp", False)
+                _rl.reset_tp_percent          = _src_r.get("reset_tp_percent")
+                _rl.reset_tp_close_percent    = _src_r.get("reset_tp_close_percent")
+                new_levels.append(_rl)
+                print(f"[RebuildV2] {symbol}/{position_side}  slot={slot_idx}  reuse level[{_rl.index}]  price={price:.8f}  qty={slot_qty}")
+                continue
             max_index += 1
             _lrc = cfg.get("level_reset_configs", [])
             _slot_rc = _lrc[slot_idx - 1] if _lrc and slot_idx - 1 < len(_lrc) else {}
@@ -1351,6 +1434,15 @@ class GridService:
 
         self.runner.place_session_orders(session)
         self.registry.save_session(session)
+
+        _rebuilt = self._rebuilt_order_ids.setdefault((symbol, position_side), {})
+        for _l in new_levels:
+            _eff = _l.slot_index if _l.slot_index is not None else _l.index
+            if _l.status == "placed" and _l.order_id and _eff in rebuilt_fill_floors:
+                _rebuilt[str(_l.order_id)] = {
+                    "floor": rebuilt_fill_floors[_eff],
+                    "rechecks_left": 1,
+                }
 
         placed_snap = [(l.index, l.order_id) for l in session.levels if l.status == "placed"]
         print(f"[RebuildV2] {symbol}/{position_side}  done  new={len(new_levels)}  active_placed={placed_snap}")

@@ -57,6 +57,47 @@ class GridTrailingWatcher:
     # Private
     # ------------------------------------------------------------------
 
+    def _reconcile_tail(self, symbol: str, position_side: str, pos_qty: float) -> None:
+        if self._grid_service._reset_tp_order.get((symbol, position_side)):
+            print(f"[TailReconcile] {symbol}/{position_side}  skipped due to active reset TP")
+            return
+        if pos_qty <= 0:
+            return
+        cfg = self._grid_service._grid_build_config.get((symbol, position_side))
+        if not cfg:
+            return
+        slot_qtys    = cfg.get("slot_qtys", [])
+        orders_count = cfg.get("orders_count", 0)
+        if not slot_qtys or not orders_count:
+            return
+        _rem, lvl_in_pos = pos_qty, 0
+        for sq in slot_qtys:
+            if _rem >= sq * 0.5:
+                _rem -= sq
+                lvl_in_pos += 1
+            else:
+                break
+        if lvl_in_pos >= orders_count:
+            return
+        expected = set(range(lvl_in_pos + 1, orders_count + 1))
+        session = self._grid_service.get_session(symbol, position_side)
+        if not session:
+            return
+        actual = {
+            (l.slot_index if l.slot_index is not None else l.index)
+            for l in session.levels if l.status == "placed"
+        }
+        missing = expected - actual
+        orphans = actual - expected
+        if not missing:
+            return
+        if orphans:
+            print(f"[TailReconcile] {symbol}/{position_side}  orphan_slots={sorted(orphans)}  missing={sorted(missing)}  → skip (position lag)")
+            return
+        target = sorted(missing, reverse=True)
+        print(f"[TailReconcile] {symbol}/{position_side}  pos_qty={pos_qty:.4f}  lvl_in_pos={lvl_in_pos}  missing_slots={target}  → rebuilding")
+        self._grid_service.rebuild_pending_tail(symbol, position_side, target_slots=target)
+
     def _on_price_update(self, symbol: str, price: float) -> None:
         with self._lock:
             legs = [(s, ps) for (s, ps) in self._watched if s == symbol]
@@ -80,6 +121,7 @@ class GridTrailingWatcher:
 
     def _do_check(self, symbol: str, price: float, position_side: str) -> None:
         key = (symbol, position_side)
+        _qty_before_tick = self._last_known_qty.get(key)
         try:
             with self._lock:
                 if key not in self._watched:
@@ -104,6 +146,8 @@ class GridTrailingWatcher:
                 return
 
             print(f"[GRID-FILL] {symbol}/{position_side}  → calling check_reset_tp_fill")
+            _joint_levels_this_tick = []
+            _skip_tail_reconcile = False
             reset_filled = self._grid_service.check_reset_tp_fill(symbol, position_side)
             print(f"[GRID-FILL] {symbol}/{position_side}  check_reset_tp_fill returned: {reset_filled and reset_filled['order_id']}")
             if reset_filled:
@@ -115,6 +159,7 @@ class GridTrailingWatcher:
                 )
                 detection_mode = reset_filled.get("detection_mode", "unknown")
                 joint_levels   = reset_filled.get("joint_levels", [])
+                _joint_levels_this_tick = joint_levels
                 print(
                     f"[GRID-FILL] {symbol}/{position_side}"
                     f"  detection_mode={detection_mode}"
@@ -165,22 +210,25 @@ class GridTrailingWatcher:
                     _pr_sq  = _pr_cfg.get("slot_qtys", [])
                     _pr_oc  = _pr_cfg.get("orders_count", 0)
                     _pr_target = None
-                    if _rtp_count is not None and _pr_sq and _pr_oc:
-                        _pr_rem, _pr_lip = _curr_qty_rt, 0
-                        for _pr_s in _pr_sq:
-                            if _pr_rem >= _pr_s * 0.5:
-                                _pr_rem -= _pr_s; _pr_lip += 1
+                    if _pr_sq and _pr_oc:
+                        _pending_slots = sorted({
+                            (l.slot_index if l.slot_index is not None else l.index)
+                            for l in pending
+                            if 1 <= (l.slot_index if l.slot_index is not None else l.index) <= _pr_oc
+                        }, reverse=True)
+                        _released_rem = reset_filled.get("qty", 0.0)
+                        _freed_slots = []
+                        for _slot_idx in range(_pr_oc, 0, -1):
+                            if _slot_idx in _pending_slots:
+                                continue
+                            _slot_qty = _pr_sq[_slot_idx - 1]
+                            if _released_rem >= _slot_qty * 0.9:
+                                _released_rem -= _slot_qty
+                                _freed_slots.append(_slot_idx)
                             else:
                                 break
-                        _pr_full = list(range(_pr_oc, _pr_lip, -1))
-                        _freed, _freed_rem = 0, reset_filled.get("qty", 0.0)
-                        for _pr_s in _pr_sq:
-                            if _freed_rem >= _pr_s * 0.9:
-                                _freed_rem -= _pr_s; _freed += 1
-                            else:
-                                break
-                        _pr_target = _pr_full[:len(pending) + _freed]
-                        print(f"[ResetDecrease] {symbol}/{position_side}  target_slots={_pr_target}  pending={len(pending)}  freed_slots={_freed}  lvl_in_pos={_pr_lip}")
+                        _pr_target = sorted(set(_pending_slots + _freed_slots), reverse=True)
+                        print(f"[ResetDecrease] {symbol}/{position_side}  target_slots={_pr_target}  pending_slots={_pending_slots}  freed_slots={_freed_slots}  released_qty={reset_filled.get('qty', 0.0)}")
                     rebuilt = self._grid_service.rebuild_pending_tail(symbol, position_side, target_slots=_pr_target)
                 else:
                     # Reset TP + extra manual close: reprice main TP and SL for new position
@@ -246,7 +294,7 @@ class GridTrailingWatcher:
                     f"  order_ids={[l.order_id for l in filled]}"
                 )
                 reset_trigger = next(
-                    (lvl for lvl in reversed(filled) if lvl.use_reset_tp), None
+                    (lvl for lvl in reversed(filled + _joint_levels_this_tick) if lvl.use_reset_tp), None
                 )
                 print(
                     f"[FillDbg] {symbol}/{position_side}"
@@ -357,6 +405,10 @@ class GridTrailingWatcher:
                             if _sgr_candidate:
                                 print(f"[StaleResetTP] {symbol}/{position_side}  re-place reset TP → level[{_sgr_candidate.index}]  covered_slots={_sgr_lvl_in_pos}")
                                 self._grid_service.place_reset_tp_complex(symbol, position_side, _sgr_candidate)
+                                _sgr_entry = self._grid_service._reset_tp_order.get((symbol, position_side))
+                                if _sgr_entry and _sgr_lvl_in_pos > _sgr_entry.get("trigger_slot", 0):
+                                    _sgr_entry["trigger_slot"] = _sgr_lvl_in_pos
+                                    print(f"[StaleResetTP] {symbol}/{position_side}  trigger_slot overridden → {_sgr_lvl_in_pos}")
                         self._grid_service.update_sl_after_averaging(symbol, position_side)
                         self._last_known_qty[key] = _srtp_curr
                     else:
@@ -438,45 +490,44 @@ class GridTrailingWatcher:
                             for q in _placed_qtys
                         )
                         if _matches_fill:
+                            _skip_tail_reconcile = True
                             print(f"[ManualAdd] {symbol}/{position_side}  skipped: delta={_delta:.4f} matches placed level qty  → likely API-lag fill, next tick will detect")
-                            _mf_rtp = self._grid_service._reset_tp_order.get((symbol, position_side))
-                            if not _mf_rtp:
-                                _mf_cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
-                                _mf_slot_qtys = _mf_cfg.get("slot_qtys", [])
-                                _mf_lvl_in_pos = 0
-                                _mf_rem = _pos_qty
-                                for _mf_sq in _mf_slot_qtys:
-                                    if _mf_rem >= _mf_sq * 0.5:
-                                        _mf_rem -= _mf_sq
-                                        _mf_lvl_in_pos += 1
-                                    else:
-                                        break
-                                if _mf_lvl_in_pos > 0:
-                                    _mf_sess = self._grid_service.get_session(symbol, position_side)
-                                    _mf_candidate = next(
-                                        (l for l in sorted(
-                                            (_mf_sess.levels if _mf_sess else []),
-                                            key=lambda x: (x.slot_index if x.slot_index is not None else x.index),
-                                            reverse=True
-                                        ) if l.use_reset_tp
-                                           and (l.slot_index if l.slot_index is not None else l.index) <= _mf_lvl_in_pos),
-                                        None
-                                    )
-                                    if _mf_candidate:
-                                        print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: reset TP missing → reconcile level[{_mf_candidate.index}]  slot={(_mf_candidate.slot_index if _mf_candidate.slot_index is not None else _mf_candidate.index)}  covered_slots={_mf_lvl_in_pos}")
-                                        self._grid_service.place_reset_tp_complex(symbol, position_side, _mf_candidate)
-                            # TP/SL reconcile: position grew via drag fill, normal fill-path skipped.
-                            # Only if no active reset TP — place_reset_tp_complex already reprices main TP.
-                            _mf_rtp_now = self._grid_service._reset_tp_order.get((symbol, position_side))
-                            if not _mf_rtp_now:
+                            _mf_cfg = self._grid_service._grid_build_config.get((symbol, position_side), {})
+                            _mf_slot_qtys = _mf_cfg.get("slot_qtys", [])
+                            _mf_lvl_in_pos = 0
+                            _mf_rem = _pos_qty
+                            for _mf_sq in _mf_slot_qtys:
+                                if _mf_rem >= _mf_sq * 0.5:
+                                    _mf_rem -= _mf_sq
+                                    _mf_lvl_in_pos += 1
+                                else:
+                                    break
+                            _mf_restored = None
+                            for _mf_gc in sorted(
+                                [l for l in (_sess_snap.levels if _sess_snap else [])
+                                 if l.status == "canceled" and l.qty > 0],
+                                key=lambda l: (l.slot_index if l.slot_index is not None else l.index),
+                            ):
+                                _gc_slot = _mf_gc.slot_index if _mf_gc.slot_index is not None else _mf_gc.index
+                                if (
+                                    _gc_slot <= _mf_lvl_in_pos
+                                    and abs(_mf_gc.qty - _delta) / max(_delta, 1e-9) < 0.15
+                                ):
+                                    _mf_gc.status = "filled"
+                                    _mf_restored = _mf_gc
+                                    print(f"[ManualAdd] {symbol}/{position_side}  ghost-canceled level[{_mf_gc.index}] restored to filled  qty={_mf_gc.qty:.4f}  delta={_delta:.4f}")
+                                    break
+                            if _mf_restored and _mf_restored.use_reset_tp:
+                                print(f"[ManualAdd] {symbol}/{position_side}  ghost-canceled reset TP reconcile → level[{_mf_restored.index}]")
+                                self._grid_service.place_reset_tp_complex(symbol, position_side, _mf_restored)
+                            elif _mf_restored:
                                 _mf_mode = self._grid_service._tp_update_mode.get((symbol, position_side), "fixed")
+                                print(f"[ManualAdd] {symbol}/{position_side}  ghost-canceled non-reset fill reconcile  mode={_mf_mode}")
                                 if _mf_mode == "reprice":
                                     self._grid_service.update_grid_tp_orders_reprice(symbol, position_side)
                                 else:
                                     self._grid_service.update_grid_tp_orders_fixed(symbol, position_side)
-                                print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: TP repriced after drag fill")
-                            self._grid_service.update_sl_after_averaging(symbol, position_side)
-                            print(f"[ManualAdd] {symbol}/{position_side}  _matches_fill: SL updated")
+                                self._grid_service.update_sl_after_averaging(symbol, position_side)
                         else:
                             print(
                                 f"[ManualAdd] {symbol}/{position_side}"
@@ -576,6 +627,16 @@ class GridTrailingWatcher:
                         return
                 # ─────────────────────────────────────────────────────────
             # ────────────────────────────────────────────────────────────
+
+            # ── position-change-triggered tail reconcile ──────────────
+            _rc_qty = 0.0
+            for _p in self._grid_service.exchange.get_positions(symbol):
+                if _p["positionSide"] == position_side:
+                    _rc_qty = abs(float(_p["positionAmt"]))
+                    break
+            if not reset_filled and not _skip_tail_reconcile and abs((_qty_before_tick or 0) - _rc_qty) > 1e-9:
+                self._reconcile_tail(symbol, position_side, _rc_qty)
+            # ──────────────────────────────────────────────────────────
 
             _sess_for_trail = self._grid_service.get_session(symbol, position_side)
             _in_position = _sess_for_trail and any(

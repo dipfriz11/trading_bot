@@ -25,19 +25,22 @@ class GridRunner:
             level.qty   = self.exchange.normalize_qty(session.symbol, level.qty)
             level.price = self.exchange.normalize_price(session.symbol, side, level.price)
 
-            response = self.exchange.place_limit_order(
-                symbol=session.symbol,
-                side=side,
-                quantity=level.qty,
-                price=level.price,
-                position_side=level.position_side,
-            )
-
-            if "orderId" in response:
-                level.order_id = str(response["orderId"])
-            level.client_order_id = response.get("clientOrderId")
-            level.status = "placed"
-            any_placed = True
+            try:
+                response = self.exchange.place_limit_order(
+                    symbol=session.symbol,
+                    side=side,
+                    quantity=level.qty,
+                    price=level.price,
+                    position_side=level.position_side,
+                )
+                if "orderId" in response:
+                    level.order_id = str(response["orderId"])
+                level.client_order_id = response.get("clientOrderId")
+                level.status = "placed"
+                any_placed = True
+            except Exception as _e:
+                print(f"[GridRunner] place_session_orders: level[{level.index}] placement failed → canceled: {_e}")
+                level.status = "canceled"
 
         if any_placed:
             session.status = "running"
