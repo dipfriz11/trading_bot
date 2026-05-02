@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from trading_core.grid.grid_models import GridLevel, GridSession
+from trading_core.grid.grid_models import CustomGridLevelConfig, GridLevel, GridSession
 
 
 @dataclass
@@ -313,6 +313,22 @@ class GridService:
 
     def get_all_sessions(self) -> List[GridSession]:
         return self.registry.get_all_sessions()
+
+    def build_custom_grid_preview(
+        self,
+        symbol: str,
+        position_side: str,
+        reference_price: float,
+        total_budget: float,
+        custom_levels: List[CustomGridLevelConfig],
+    ) -> GridSession:
+        return self.builder.build_custom_session(
+            symbol=symbol,
+            position_side=position_side,
+            custom_levels=custom_levels,
+            reference_price=reference_price,
+            total_budget=total_budget,
+        )
 
     def enable_trailing(
         self,
